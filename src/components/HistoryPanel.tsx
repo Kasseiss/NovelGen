@@ -1,27 +1,43 @@
 import { useState, useEffect } from 'react';
 import { BookOpen, Plus, Trash2, Loader2, Play, BookMarked } from 'lucide-react';
-import { useStore, loadHistory } from '../store';
+import { useStore } from '../store';
 import { NovelRecord } from '../types';
 
 export default function HistoryPanel() {
-  const loadFromHistory = useStore((s) => s.loadFromHistory);
-  const deleteHistoryRecord = useStore((s) => s.deleteHistoryRecord);
   const setView = useStore((s) => s.setView);
+  const setSelectedNovel = useStore((s) => s.setSelectedNovel);
   const [records, setRecords] = useState<NovelRecord[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
-    const timer = setInterval(() => setRecords(loadHistory()), 2000);
-    setRecords(loadHistory());
-    return () => clearInterval(timer);
+    let stop = false;
+    const load = async () => {
+      try {
+        const resp = await fetch('/api/novels');
+        const data = await resp.json();
+        if (!stop) setRecords(data);
+      } catch {}
+    };
+    load();
+    const timer = setInterval(load, 3000);
+    return () => { stop = true; clearInterval(timer); };
   }, []);
 
-  const confirmDelete = () => {
-    if (confirmDeleteId) {
-      deleteHistoryRecord(confirmDeleteId);
-      setRecords(loadHistory());
-      setConfirmDeleteId(null);
-    }
+  const deleteNovel = async () => {
+    if (!confirmDeleteId) return;
+    await fetch('/api/novels/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: confirmDeleteId }),
+    });
+    setConfirmDeleteId(null);
+    const resp = await fetch('/api/novels');
+    setRecords(await resp.json());
+  };
+
+  const openNovel = (item: NovelRecord) => {
+    setSelectedNovel(item);
+    setView(item.status === 'generating' ? 'generating' : 'reading');
   };
 
   return (
@@ -59,100 +75,72 @@ export default function HistoryPanel() {
           <div className="max-w-3xl mx-auto space-y-4">
             {records.map((record) => {
               const totalWords = record.chapters.reduce((s, c) => s + c.wordCount, 0);
-              const targetChapters = record.novelConfig.chapterCount;
-              const completedChapters = record.chapters.length;
+              const completedChapters = record.chapters.filter((x) => x.status === 'completed').length;
+              const targetChapters = record.chapterCount || 500;
               const isGenerating = record.status === 'generating';
-              const progress = targetChapters > 0 ? Math.min(100, (completedChapters / targetChapters) * 100) : 0;
+              const progress = Math.min(100, (completedChapters / targetChapters) * 100);
 
               return (
                 <div
                   key={record.id}
-                  onClick={() => loadFromHistory(record.id)}
+                  onClick={() => openNovel(record)}
                   className={`group p-5 rounded-xl border cursor-pointer transition-all ${
                     isGenerating
                       ? 'bg-amber-400/5 border-amber-400/20 hover:border-amber-400/40'
+                      : record.status === 'error'
+                      ? 'bg-red-500/5 border-red-500/20 hover:border-red-500/40'
                       : 'bg-ink-900/50 border-ink-800 hover:border-ink-700 hover:bg-ink-900/80'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2">
-                        {isGenerating && (
-                          <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
-                        )}
-                        {!isGenerating && (
-                          <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                        )}
-                        <h3 className="text-ink-100 font-medium truncate">
-                          {record.theme.slice(0, 60)}{record.theme.length > 60 ? '...' : ''}
-                        </h3>
+                        {isGenerating && <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />}
+                        {record.status === 'completed' && <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />}
+                        {record.status === 'error' && <div className="w-2 h-2 rounded-full bg-red-500 shrink-0" />}
+                        <h3 className="text-ink-100 font-medium truncate">{record.theme.slice(0, 60)}</h3>
                       </div>
 
                       <div className="flex items-center gap-4 text-xs text-ink-500 mb-3">
-                        {isGenerating ? (
-                          <span className="text-amber-400">正在生成中...</span>
-                        ) : (
-                          <span>{record.updatedAt}</span>
-                        )}
+                        {isGenerating ? <span className="text-amber-400">正在后台生成...</span> : record.status === 'error' ? <span className="text-red-400">生成失败</span> : <span>{record.updatedAt}</span>}
                         <span>{completedChapters} 章</span>
                         <span>{totalWords.toLocaleString()} 字</span>
-                        {targetChapters > 0 && (
-                          <span>{targetChapters} 章目标</span>
-                        )}
+                        <span>{record.chapterCount > 0 ? `${record.chapterCount} 章目标` : '无限模式'}</span>
                       </div>
 
                       {isGenerating && (
                         <div className="mb-3">
                           <div className="w-full h-1.5 bg-ink-800 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all"
-                              style={{ width: `${progress}%` }}
-                            />
+                            <div className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all" style={{ width: `${progress}%` }} />
                           </div>
-                          <p className="text-xs text-ink-600 mt-1">
-                            {targetChapters > 0
-                              ? `已完成 ${completedChapters}/${targetChapters} 章`
-                              : `已完成 ${completedChapters} 章`
-                            }
-                          </p>
+                          <p className="text-xs text-ink-600 mt-1">{record.chapterCount > 0 ? `已完成 ${completedChapters}/${record.chapterCount} 章` : `已完成 ${completedChapters} 章`}</p>
                         </div>
                       )}
 
-                      {!isGenerating && record.chapters.length > 0 && (
+                      {record.chapters.length > 0 && (
                         <div className="flex flex-wrap gap-1.5">
                           {record.chapters.slice(0, 6).map((ch) => (
-                            <span
-                              key={ch.id}
-                              className="text-xs text-ink-500 bg-ink-800/80 px-2 py-0.5 rounded"
-                            >
+                            <span key={ch.id} className="text-xs text-ink-500 bg-ink-800/80 px-2 py-0.5 rounded">
                               {ch.id}. {ch.title ? ch.title.slice(0, 8) : `第${ch.id}章`}
                             </span>
                           ))}
-                          {record.chapters.length > 6 && (
-                            <span className="text-xs text-ink-600">
-                              +{record.chapters.length - 6}
-                            </span>
-                          )}
+                          {record.chapters.length > 6 && <span className="text-xs text-ink-600">+{record.chapters.length - 6}</span>}
                         </div>
                       )}
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                      {isGenerating && (
+                      {isGenerating ? (
                         <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-amber-400/15 text-amber-400 rounded-lg">
                           <Play className="w-3 h-3" />查看
                         </div>
-                      )}
-                      {!isGenerating && completedChapters > 0 && (
+                      ) : completedChapters > 0 ? (
                         <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-gold-400/10 text-gold-400 rounded-lg">
                           <BookOpen className="w-3 h-3" />阅读
                         </div>
-                      )}
+                      ) : null}
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setConfirmDeleteId(record.id);
-                        }}
+                        onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(record.id); }}
                         className="p-1.5 text-ink-700 hover:text-red-400 transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -173,18 +161,8 @@ export default function HistoryPanel() {
             <h3 className="text-ink-100 font-medium mb-2">确认删除</h3>
             <p className="text-ink-400 text-sm mb-6">确定要删除这部作品吗？删除后无法恢复。</p>
             <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setConfirmDeleteId(null)}
-                className="px-4 py-2 text-sm text-ink-300 hover:text-ink-100 bg-ink-800 hover:bg-ink-700 rounded-lg transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="px-4 py-2 text-sm text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-colors"
-              >
-                确认删除
-              </button>
+              <button onClick={() => setConfirmDeleteId(null)} className="px-4 py-2 text-sm text-ink-300 bg-ink-800 rounded-lg">取消</button>
+              <button onClick={deleteNovel} className="px-4 py-2 text-sm text-white bg-red-500/80 rounded-lg">确认删除</button>
             </div>
           </div>
         </div>

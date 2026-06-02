@@ -19,7 +19,7 @@ export default function ConfigPanel() {
   const [localModel, setLocalModel] = useState(apiConfig.model);
   const [localSystemPrompt, setLocalSystemPrompt] = useState(apiConfig.systemPrompt);
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!localTheme.trim()) {
       showToast('请输入小说主题', 'error');
       return;
@@ -41,13 +41,34 @@ export default function ConfigPanel() {
       systemPrompt: localSystemPrompt,
     });
 
-    const state = useStore.getState();
-    if (state.currentRecordId) {
-      state.completeHistoryRecord();
+    try {
+      const resp = await fetch('/api/novels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          theme: localTheme,
+          apiConfig: {
+            baseUrl: localBaseUrl,
+            apiKey: localApiKey,
+            model: localModel,
+            systemPrompt: localSystemPrompt,
+          },
+          novelConfig: {
+            chapterCount: localChapterCount,
+            wordsPerChapter: localWordsPerChapter,
+          },
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        showToast(data?.error || '创建失败', 'error');
+        return;
+      }
+      useStore.getState().setSelectedNovel(data);
+      useStore.getState().setView('generating');
+    } catch (e) {
+      showToast('创建任务失败', 'error');
     }
-    useStore.setState({ chapters: [], currentChapterId: 0, currentRecordId: null, error: null });
-    useStore.setState({ isGenerating: true });
-    setView('history');
   };
 
   return (

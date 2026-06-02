@@ -28,9 +28,12 @@ export interface NovelRecord {
   apiConfig: ApiConfig;
   novelConfig: NovelConfig;
   chapters: Chapter[];
-  status: 'generating' | 'completed';
+  status: 'generating' | 'completed' | 'error';
   createdAt: string;
   updatedAt: string;
+  chapterCount?: number;
+  wordsPerChapter?: number;
+  error?: string;
 }
 
 export interface AppState {
@@ -44,6 +47,7 @@ export interface AppState {
   view: ViewState;
   sidebarCollapsed: boolean;
   error: string | null;
+  selectedNovel: NovelRecord | null;
 }
 
 export interface ChatMessage {
