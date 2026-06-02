@@ -12,8 +12,6 @@ export default function GeneratingPanel() {
 
   const handleStop = () => {
     stopGeneration();
-    useStore.getState().setShouldStop(true);
-    useStore.getState().setIsGenerating(false);
     useStore.getState().setView('history');
   };
 

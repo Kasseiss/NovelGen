@@ -5,7 +5,6 @@ import { showToast } from './components/Toast';
 const STORAGE_KEY = 'novel-generator-config';
 const HISTORY_KEY = 'novel-generator-history';
 const ACTIVE_RECORD_KEY = 'novel-generator-active-record';
-const MAX_CHAPTERS = 500;
 
 function loadConfig(): { novelConfig: AppState['novelConfig']; apiConfig: AppState['apiConfig'] } {
   try {
@@ -57,12 +56,12 @@ const history = loadHistory();
 const activeRecord = activeRecordId ? history.find((r) => r.id === activeRecordId && r.status === 'generating') : null;
 
 const initialState: AppState = {
-  novelConfig: config.novelConfig,
-  apiConfig: config.apiConfig,
+  novelConfig: activeRecord ? activeRecord.novelConfig : config.novelConfig,
+  apiConfig: activeRecord ? activeRecord.apiConfig : config.apiConfig,
   chapters: activeRecord ? activeRecord.chapters : [],
   currentChapterId: activeRecord && activeRecord.chapters.length > 0 ? Math.max(...activeRecord.chapters.map((c) => c.id)) : 0,
   currentRecordId: activeRecord ? activeRecord.id : null,
-  isGenerating: false,
+  isGenerating: !!activeRecord,
   shouldStop: false,
   view: activeRecord ? 'generating' : 'history',
   sidebarCollapsed: false,
@@ -121,7 +120,7 @@ export const useStore = create<AppState & {
       const records = loadHistory();
       const idx = records.findIndex((r) => r.id === s.currentRecordId);
       if (idx !== -1) {
-        records[idx].chapters = newChapters.filter((c) => c.status === 'completed' || c.status === 'error');
+        records[idx].chapters = newChapters;
         records[idx].updatedAt = new Date().toLocaleString('zh-CN');
         saveHistory(records);
       }
@@ -137,13 +136,12 @@ export const useStore = create<AppState & {
 
   createHistoryRecord: () => {
     const s = get();
-    const completedChapters = s.chapters.filter((c) => c.status === 'completed');
     const record: NovelRecord = {
       id: `${Date.now()}`,
       theme: s.novelConfig.theme,
       apiConfig: { ...s.apiConfig },
       novelConfig: { ...s.novelConfig },
-      chapters: completedChapters,
+      chapters: [],
       status: 'generating',
       createdAt: new Date().toLocaleString('zh-CN'),
       updatedAt: new Date().toLocaleString('zh-CN'),
@@ -162,7 +160,7 @@ export const useStore = create<AppState & {
     const records = loadHistory();
     const idx = records.findIndex((r) => r.id === s.currentRecordId);
     if (idx !== -1) {
-      records[idx].chapters = s.chapters.filter((c) => c.status === 'completed' || c.status === 'error');
+      records[idx].chapters = s.chapters;
       records[idx].updatedAt = new Date().toLocaleString('zh-CN');
       saveHistory(records);
     }
@@ -193,10 +191,17 @@ export const useStore = create<AppState & {
   },
 
   loadFromHistory: (recordId) => {
+    const s = get();
     const records = loadHistory();
     const record = records.find((r) => r.id === recordId);
     if (!record) return;
     const isGeneratingRecord = record.status === 'generating';
+
+    if (isGeneratingRecord && s.currentRecordId === recordId && s.isGenerating) {
+      set({ view: 'generating' });
+      return;
+    }
+
     setActiveRecordId(isGeneratingRecord ? recordId : null);
     set({
       novelConfig: record.novelConfig,

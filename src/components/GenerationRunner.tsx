@@ -1,29 +1,26 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useStore } from '../store';
 import { generateChapterPlan, generateChapterContent, parseChapterContent, countChineseWords } from '../utils/api';
 
-let loopRunning = false;
-let abortController: AbortController | null = null;
-
 export function stopGeneration() {
-  loopRunning = false;
-  if (abortController) {
-    abortController.abort();
-    abortController = null;
-  }
+  useStore.getState().setShouldStop(true);
+  useStore.getState().setIsGenerating(false);
 }
 
 export default function GenerationRunner() {
   const isGenerating = useStore((s) => s.isGenerating);
+  const loopRef = useRef(false);
 
   useEffect(() => {
-    if (!isGenerating || loopRunning) return;
-    loopRunning = true;
+    if (!isGenerating || loopRef.current) return;
+    loopRef.current = true;
     useStore.getState().setError(null);
 
     if (!useStore.getState().currentRecordId) {
       useStore.getState().createHistoryRecord();
     }
+
+    let cancelled = false;
 
     const run = async () => {
       let chapterNum = (() => {
@@ -35,9 +32,9 @@ export default function GenerationRunner() {
         return Math.max(...lastCompleted.map((c) => c.id)) + 1;
       })();
 
-      while (loopRunning) {
+      while (!cancelled) {
         const state = useStore.getState();
-        if (state.shouldStop) break;
+        if (!state.isGenerating || state.shouldStop) break;
         if (state.novelConfig.chapterCount > 0 && chapterNum > state.novelConfig.chapterCount) break;
         if (chapterNum > 500) break;
 
@@ -59,24 +56,21 @@ export default function GenerationRunner() {
         }
 
         try {
-          abortController = new AbortController();
-          const signal = abortController.signal;
-
           const { title, plan } = await generateChapterPlan(
             state.apiConfig, state.novelConfig.theme,
-            chapterNum, state.novelConfig.chapterCount, prev, signal
+            chapterNum, state.novelConfig.chapterCount, prev
           );
 
-          if (!loopRunning) break;
+          if (cancelled) break;
           useStore.getState().updateChapter(chapterNum, { title, plan, status: 'writing' });
 
           const fullContent = await generateChapterContent(
             state.apiConfig, state.novelConfig.theme,
             chapterNum, state.novelConfig.chapterCount, state.novelConfig.wordsPerChapter,
-            plan, prev, state.apiConfig.systemPrompt, signal
+            plan, prev, state.apiConfig.systemPrompt
           );
 
-          if (!loopRunning) break;
+          if (cancelled) break;
           const { title: parsedTitle, content } = parseChapterContent(fullContent);
           const wordCount = countChineseWords(content);
 
@@ -86,7 +80,7 @@ export default function GenerationRunner() {
 
           chapterNum++;
         } catch (err) {
-          if (!loopRunning) break;
+          if (cancelled) break;
           const msg = err instanceof Error ? err.message : '生成失败';
           useStore.getState().updateChapter(chapterNum, { status: 'error' });
           useStore.getState().setError(msg);
@@ -94,10 +88,7 @@ export default function GenerationRunner() {
         }
       }
 
-      const wasRunning = loopRunning;
-      loopRunning = false;
-      abortController = null;
-      if (wasRunning) {
+      if (!cancelled) {
         const finalState = useStore.getState();
         if (finalState.currentRecordId) {
           finalState.completeHistoryRecord();
@@ -105,9 +96,15 @@ export default function GenerationRunner() {
       }
       useStore.getState().setIsGenerating(false);
       useStore.getState().setShouldStop(false);
+      loopRef.current = false;
     };
 
     run();
+
+    return () => {
+      cancelled = true;
+      loopRef.current = false;
+    };
   }, [isGenerating]);
 
   return null;
