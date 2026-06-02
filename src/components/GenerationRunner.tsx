@@ -15,6 +15,7 @@ export default function GenerationRunner() {
     if (!isGenerating || loopRef.current) return;
     loopRef.current = true;
     useStore.getState().setError(null);
+    useStore.getState().setShouldStop(false);
 
     if (!useStore.getState().currentRecordId) {
       useStore.getState().createHistoryRecord();
@@ -32,9 +33,14 @@ export default function GenerationRunner() {
         return Math.max(...lastCompleted.map((c) => c.id)) + 1;
       })();
 
+      let stoppedByUser = false;
+
       while (!cancelled) {
         const state = useStore.getState();
-        if (!state.isGenerating || state.shouldStop) break;
+        if (!state.isGenerating || state.shouldStop) {
+          stoppedByUser = true;
+          break;
+        }
         if (state.novelConfig.chapterCount > 0 && chapterNum > state.novelConfig.chapterCount) break;
         if (chapterNum > 500) break;
 
@@ -84,16 +90,18 @@ export default function GenerationRunner() {
           const msg = err instanceof Error ? err.message : '生成失败';
           useStore.getState().updateChapter(chapterNum, { status: 'error' });
           useStore.getState().setError(msg);
+          stoppedByUser = false;
           break;
         }
       }
 
-      if (!cancelled) {
+      if (!cancelled && !stoppedByUser) {
         const finalState = useStore.getState();
         if (finalState.currentRecordId) {
           finalState.completeHistoryRecord();
         }
       }
+
       useStore.getState().setIsGenerating(false);
       useStore.getState().setShouldStop(false);
       loopRef.current = false;
