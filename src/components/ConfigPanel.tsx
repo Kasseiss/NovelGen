@@ -12,8 +12,8 @@ export default function ConfigPanel() {
 
   const [showApiConfig, setShowApiConfig] = useState(false);
   const [localTheme, setLocalTheme] = useState(novelConfig.theme);
-  const [localChapterCount, setLocalChapterCount] = useState(novelConfig.chapterCount);
-  const [localWordsPerChapter, setLocalWordsPerChapter] = useState(novelConfig.wordsPerChapter);
+  const [localChapterCount, setLocalChapterCount] = useState(String(novelConfig.chapterCount));
+  const [localWordsPerChapter, setLocalWordsPerChapter] = useState(String(novelConfig.wordsPerChapter));
   const [localBaseUrl, setLocalBaseUrl] = useState(apiConfig.baseUrl);
   const [localApiKey, setLocalApiKey] = useState(apiConfig.apiKey);
   const [localModel, setLocalModel] = useState(apiConfig.model);
@@ -29,10 +29,22 @@ export default function ConfigPanel() {
       return;
     }
 
+    const chapterCount = parseInt(localChapterCount) || 0;
+    const wordsPerChapter = parseInt(localWordsPerChapter) || 3000;
+
+    if (chapterCount < 0 || chapterCount > 500) {
+      showToast('章节数量范围: 0 - 500', 'error');
+      return;
+    }
+    if (wordsPerChapter < 100 || wordsPerChapter > 50000) {
+      showToast('每章字数范围: 100 - 50,000', 'error');
+      return;
+    }
+
     setNovelConfig({
       theme: localTheme,
-      chapterCount: localChapterCount,
-      wordsPerChapter: localWordsPerChapter,
+      chapterCount,
+      wordsPerChapter,
     });
     setApiConfig({
       baseUrl: localBaseUrl,
@@ -54,8 +66,8 @@ export default function ConfigPanel() {
             systemPrompt: localSystemPrompt,
           },
           novelConfig: {
-            chapterCount: localChapterCount,
-            wordsPerChapter: localWordsPerChapter,
+            chapterCount,
+            wordsPerChapter,
           },
         }),
       });
@@ -108,9 +120,7 @@ export default function ConfigPanel() {
               <input
                 type="number"
                 value={localChapterCount}
-                onChange={(e) => setLocalChapterCount(Math.max(0, Math.min(500, parseInt(e.target.value) || 0)))}
-                min={0}
-                max={500}
+                onChange={(e) => setLocalChapterCount(e.target.value)}
                 className="w-full bg-ink-950 border border-ink-800 rounded-lg px-4 py-2.5 text-ink-50 focus:outline-none focus:border-gold-400/50 focus:ring-1 focus:ring-gold-400/20 transition-all"
               />
               <p className="text-ink-600 text-xs mt-1">0 = 无限生成（最多 500 章）</p>
@@ -120,13 +130,10 @@ export default function ConfigPanel() {
               <input
                 type="number"
                 value={localWordsPerChapter}
-                onChange={(e) => setLocalWordsPerChapter(Math.max(500, Math.min(10000, parseInt(e.target.value) || 500)))}
-                min={500}
-                max={10000}
-                step={100}
+                onChange={(e) => setLocalWordsPerChapter(e.target.value)}
                 className="w-full bg-ink-950 border border-ink-800 rounded-lg px-4 py-2.5 text-ink-50 focus:outline-none focus:border-gold-400/50 focus:ring-1 focus:ring-gold-400/20 transition-all"
               />
-              <p className="text-ink-600 text-xs mt-1">范围: 500 - 10,000</p>
+              <p className="text-ink-600 text-xs mt-1">建议: 1,000 - 10,000</p>
             </div>
           </div>
         </div>
