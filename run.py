@@ -131,7 +131,7 @@ def run_generation_job(novel_id):
 
             chapters = novel.get('chapters', [])
             chapter_count = novel.get('chapterCount', 0)
-            target = min(chapter_count if chapter_count and chapter_count > 0 else 500, 500)
+            target = chapter_count if chapter_count and chapter_count > 0 else 500
 
             completed = [c for c in chapters if c.get('status') == 'completed']
             if len(completed) >= target:
