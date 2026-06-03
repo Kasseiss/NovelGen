@@ -13,6 +13,7 @@ import urllib.parse
 import zipfile
 import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.resolve()
@@ -30,7 +31,7 @@ NODE_URLS = {
     'Windows-x86_64': f'https://nodejs.org/dist/{NODE_VERSION}/node-{NODE_VERSION}-win-x64.zip',
 }
 
-store_lock = threading.Lock()
+store_lock = threading.RLock()
 active_jobs = {}
 
 
@@ -432,7 +433,8 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type,Authorization')
 
     def log_message(self, fmt, *args):
-        pass
+        sys.stderr.write(f'[HTTP] {fmt % args}\n')
+        sys.stderr.flush()
 
 
 def platform_key():
@@ -508,8 +510,16 @@ def restore_generating_jobs():
             start_job(item)
 
 
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+
+
 def run_server(host, port):
-    server = HTTPServer((host, port), AppHandler)
+    try:
+        server = ThreadedHTTPServer((host, port), AppHandler)
+    except OSError as e:
+        print(f'端口 {port} 被占用，请先关闭占用进程或换一个端口: {e}', flush=True)
+        sys.exit(1)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -520,7 +530,11 @@ def run_server(host, port):
 
 if __name__ == '__main__':
     ensure_dirs()
+    print('初始化完成', flush=True)
     npm_build_if_needed()
+    print('构建检查完成', flush=True)
     restore_generating_jobs()
+    print('恢复任务完成', flush=True)
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 3000
+    print(f'服务启动: http://localhost:{port}', flush=True)
     run_server('0.0.0.0', port)
