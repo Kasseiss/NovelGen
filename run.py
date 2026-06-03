@@ -394,6 +394,15 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_header('Expires', '0')
         if file_path.suffix == '.html':
             self.send_header('Content-Type', 'text/html; charset=utf-8')
+            content = file_path.read_bytes()
+            import time
+            ver = str(int(time.time()))
+            content = content.replace(b'/assets/', f'/assets/?v={ver}&/'.encode())
+            self.send_header('Content-Length', str(len(content)))
+            self.add_cors()
+            self.end_headers()
+            self.wfile.write(content)
+            return
         elif file_path.suffix == '.js':
             self.send_header('Content-Type', 'application/javascript; charset=utf-8')
         elif file_path.suffix == '.css':
