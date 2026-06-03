@@ -118,22 +118,21 @@ export default function ConfigPanel() {
             <div>
               <label className="block text-ink-300 text-sm mb-2">章节数量</label>
               <input
-                type="number"
+                type="text"
                 value={localChapterCount}
                 onChange={(e) => setLocalChapterCount(e.target.value)}
                 className="w-full bg-ink-950 border border-ink-800 rounded-lg px-4 py-2.5 text-ink-50 focus:outline-none focus:border-gold-400/50 focus:ring-1 focus:ring-gold-400/20 transition-all"
               />
-              <p className="text-ink-600 text-xs mt-1">0 = 无限生成（最多 500 章）</p>
+              <p className="text-ink-600 text-xs mt-1">0 = 无限生成</p>
             </div>
             <div>
               <label className="block text-ink-300 text-sm mb-2">每章字数</label>
               <input
-                type="number"
+                type="text"
                 value={localWordsPerChapter}
                 onChange={(e) => setLocalWordsPerChapter(e.target.value)}
                 className="w-full bg-ink-950 border border-ink-800 rounded-lg px-4 py-2.5 text-ink-50 focus:outline-none focus:border-gold-400/50 focus:ring-1 focus:ring-gold-400/20 transition-all"
               />
-              <p className="text-ink-600 text-xs mt-1">建议: 1,000 - 10,000</p>
             </div>
           </div>
         </div>
