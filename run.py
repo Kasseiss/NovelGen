@@ -389,6 +389,9 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.json_error(404, 'not found')
 
         self.send_response(200)
+        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+        self.send_header('Pragma', 'no-cache')
+        self.send_header('Expires', '0')
         if file_path.suffix == '.html':
             self.send_header('Content-Type', 'text/html; charset=utf-8')
         elif file_path.suffix == '.js':
