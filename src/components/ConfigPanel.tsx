@@ -32,15 +32,6 @@ export default function ConfigPanel() {
     const chapterCount = parseInt(localChapterCount) || 0;
     const wordsPerChapter = parseInt(localWordsPerChapter) || 3000;
 
-    if (chapterCount < 0 || chapterCount > 500) {
-      showToast('章节数量范围: 0 - 500', 'error');
-      return;
-    }
-    if (wordsPerChapter < 100 || wordsPerChapter > 50000) {
-      showToast('每章字数范围: 100 - 50,000', 'error');
-      return;
-    }
-
     setNovelConfig({
       theme: localTheme,
       chapterCount,
