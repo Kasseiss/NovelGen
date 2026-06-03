@@ -84,7 +84,8 @@ export default function HistoryPanel() {
                 <div
                   key={record.id}
                   onClick={() => openNovel(record)}
-                  className={`group p-5 rounded-xl border cursor-pointer transition-all ${
+                  style={{ touchAction: 'manipulation' }}
+                  className={`group p-5 rounded-xl border cursor-pointer transition-all active:scale-[0.98] ${
                     isGenerating
                       ? 'bg-amber-400/5 border-amber-400/20 hover:border-amber-400/40'
                       : record.status === 'error'
@@ -129,7 +130,7 @@ export default function HistoryPanel() {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-2 shrink-0 pointer-events-none opacity-60 group-hover:opacity-100 transition-opacity">
                       {isGenerating ? (
                         <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-amber-400/15 text-amber-400 rounded-lg">
                           <Play className="w-3 h-3" />查看
@@ -141,7 +142,7 @@ export default function HistoryPanel() {
                       ) : null}
                       <button
                         onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(record.id); }}
-                        className="p-1.5 text-ink-700 hover:text-red-400 transition-colors"
+                        className="pointer-events-auto p-1.5 text-ink-700 hover:text-red-400 transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
