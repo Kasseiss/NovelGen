@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../store';
-import { Loader2, Sparkles, AlertCircle, FileText, BookOpen, RotateCcw } from 'lucide-react';
+import { Loader2, Sparkles, AlertCircle, FileText, BookOpen, RotateCcw, Eye } from 'lucide-react';
 import { NovelRecord } from '../types';
 
 export default function GeneratingPanel() {
   const currentRecordId = useStore((s) => s.currentRecordId);
   const setSelectedNovel = useStore((s) => s.setSelectedNovel);
+  const setCurrentChapterId = useStore((s) => s.setCurrentChapterId);
   const setView = useStore((s) => s.setView);
   const chapters = useStore((s) => s.chapters);
   const novelConfig = useStore((s) => s.novelConfig);
@@ -39,6 +40,11 @@ export default function GeneratingPanel() {
   const currentChapter = localChapters.find((c) => c.status === 'writing' || c.status === 'planning');
   const isGenerating = (remote?.status || useStore.getState().selectedNovel?.status) === 'generating';
 
+  const handleReadChapter = (chapterId: number) => {
+    setCurrentChapterId(chapterId);
+    setView('reading');
+  };
+
   return (
     <div className="w-full h-full flex flex-col">
       <div className="px-4 sm:px-6 py-4 border-b border-ink-800">
@@ -59,6 +65,11 @@ export default function GeneratingPanel() {
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {completedCount > 0 && (
+              <button onClick={() => setView('reading')} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-gold-400/10 hover:bg-gold-400/20 text-gold-400 rounded-lg text-sm">
+                <Eye className="w-4 h-4" /><span className="hidden sm:inline">阅读</span>
+              </button>
+            )}
             <button onClick={() => setView('history')} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-ink-800 hover:bg-ink-700 text-ink-300 rounded-lg text-sm">
               <BookOpen className="w-4 h-4" /><span className="hidden sm:inline">书架</span>
             </button>
@@ -93,11 +104,15 @@ export default function GeneratingPanel() {
         ) : (
           <div className="space-y-4 max-w-2xl mx-auto">
             {localChapters.map((chapter) => (
-              <div key={chapter.id} className={`p-4 rounded-xl border ${
-                chapter.status === 'writing' ? 'bg-gold-400/5 border-gold-400/20' :
-                chapter.status === 'completed' ? 'bg-ink-900/50 border-ink-800' :
-                'bg-ink-900/30 border-ink-800/50'
-              }`}>
+              <div
+                key={chapter.id}
+                className={`p-4 rounded-xl border ${
+                  chapter.status === 'writing' ? 'bg-gold-400/5 border-gold-400/20' :
+                  chapter.status === 'completed' ? 'bg-ink-900/50 border-ink-800 hover:border-gold-400/30 cursor-pointer' :
+                  'bg-ink-900/30 border-ink-800/50'
+                }`}
+                onClick={() => chapter.status === 'completed' && handleReadChapter(chapter.id)}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 min-w-0">
                     {chapter.status === 'writing' && <Loader2 className="w-4 h-4 text-gold-400 animate-spin" />}
@@ -106,7 +121,12 @@ export default function GeneratingPanel() {
                       第{chapter.id}章{chapter.title ? `：${chapter.title}` : ''}
                     </span>
                   </div>
-                  {chapter.status === 'completed' && <span className="text-xs text-ink-500">{chapter.wordCount} 字</span>}
+                  <div className="flex items-center gap-2">
+                    {chapter.status === 'completed' && (
+                      <Eye className="w-3.5 h-3.5 text-ink-600" />
+                    )}
+                    {chapter.status === 'completed' && <span className="text-xs text-ink-500">{chapter.wordCount} 字</span>}
+                  </div>
                 </div>
                 {chapter.status === 'writing' && <p className="text-sm text-ink-500 mt-2">正在写作中...</p>}
                 {chapter.plan && (
