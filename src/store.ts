@@ -9,7 +9,7 @@ function loadConfig(): { novelConfig: AppState['novelConfig']; apiConfig: AppSta
     if (data) return JSON.parse(data);
   } catch {}
   return {
-    novelConfig: { theme: '', chapterCount: 10, wordsPerChapter: 3000 },
+    novelConfig: { theme: '', chapterCount: 0, wordsPerChapter: 3000 },
     apiConfig: { baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4', systemPrompt: '' },
   };
 }

@@ -12,8 +12,8 @@ export default function ConfigPanel() {
 
   const [showApiConfig, setShowApiConfig] = useState(false);
   const [localTheme, setLocalTheme] = useState(novelConfig.theme);
-  const [localChapterCount, setLocalChapterCount] = useState(String(novelConfig.chapterCount));
-  const [localWordsPerChapter, setLocalWordsPerChapter] = useState(String(novelConfig.wordsPerChapter));
+  const [localChapterCount, setLocalChapterCount] = useState('');
+  const [localWordsPerChapter, setLocalWordsPerChapter] = useState('');
   const [localBaseUrl, setLocalBaseUrl] = useState(apiConfig.baseUrl);
   const [localApiKey, setLocalApiKey] = useState(apiConfig.apiKey);
   const [localModel, setLocalModel] = useState(apiConfig.model);
