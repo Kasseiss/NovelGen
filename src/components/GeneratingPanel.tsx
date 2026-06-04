@@ -23,15 +23,12 @@ export default function GeneratingPanel() {
         if (stop) return;
         setRemote(data);
         setSelectedNovel(data);
-        if (data.status !== 'generating') {
-          setView(data.status === 'completed' ? 'reading' : 'history');
-        }
       } catch {}
     };
     load();
     const timer = setInterval(load, 3000);
     return () => { stop = true; clearInterval(timer); };
-  }, [currentRecordId, setSelectedNovel, setView]);
+  }, [currentRecordId, setSelectedNovel]);
 
   const localChapters = chapters.length ? chapters : remote?.chapters || [];
   const completedCount = localChapters.filter((c) => c.status === 'completed').length;
