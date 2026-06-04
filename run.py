@@ -396,8 +396,9 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             content = file_path.read_bytes()
             import time
-            ver = str(int(time.time()))
-            content = content.replace(b'/assets/', f'/assets/?v={ver}&/'.encode())
+            ver = str(int(time.time())).encode()
+            content = content.replace(b'.js"', b'.js?v=' + ver + b'"')
+            content = content.replace(b'.css"', b'.css?v=' + ver + b'"')
             self.send_header('Content-Length', str(len(content)))
             self.add_cors()
             self.end_headers()
