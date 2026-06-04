@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../store';
-import { Loader2, Sparkles, AlertCircle, FileText, BookOpen, RotateCcw, Eye } from 'lucide-react';
+import { Loader2, Sparkles, AlertCircle, FileText, BookOpen, RotateCcw, Eye, RefreshCw } from 'lucide-react';
 import { NovelRecord } from '../types';
 
 export default function GeneratingPanel() {
@@ -12,6 +12,7 @@ export default function GeneratingPanel() {
   const novelConfig = useStore((s) => s.novelConfig);
 
   const [remote, setRemote] = useState<NovelRecord | null>(null);
+  const [regenLoading, setRegenLoading] = useState(false);
 
   useEffect(() => {
     if (!currentRecordId) return;
@@ -42,6 +43,21 @@ export default function GeneratingPanel() {
     setView('reading');
   };
 
+  const handleRegenNovel = async () => {
+    if (!currentRecordId || regenLoading) return;
+    setRegenLoading(true);
+    try {
+      await fetch('/api/novels/regenerate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentRecordId }),
+      });
+      window.location.reload();
+    } catch {
+      setRegenLoading(false);
+    }
+  };
+
   return (
     <div className="w-full h-full flex flex-col">
       <div className="px-4 sm:px-6 py-4 border-b border-ink-800">
@@ -70,6 +86,11 @@ export default function GeneratingPanel() {
             <button onClick={() => setView('history')} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-ink-800 hover:bg-ink-700 text-ink-300 rounded-lg text-sm">
               <BookOpen className="w-4 h-4" /><span className="hidden sm:inline">书架</span>
             </button>
+            {!isGenerating && (
+              <button onClick={handleRegenNovel} disabled={regenLoading} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-ink-800 hover:bg-ink-700 text-ink-300 rounded-lg text-sm disabled:opacity-50">
+                <RefreshCw className={`w-4 h-4 ${regenLoading ? 'animate-spin' : ''}`} /><span className="hidden sm:inline">重新生成</span>
+              </button>
+            )}
             {!isGenerating && (
               <button onClick={() => setView('config')} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-ink-800 hover:bg-ink-700 text-ink-300 rounded-lg text-sm">
                 <RotateCcw className="w-4 h-4" /><span className="hidden sm:inline">配置</span>

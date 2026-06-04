@@ -298,6 +298,174 @@ def run_generation_job(novel_id):
             active_jobs.pop(novel_id, None)
 
 
+def run_chapter_regen_job(novel_id, chapter_id):
+    try:
+        with store_lock:
+            _, _, novel = find_novel(novel_id)
+        if not novel:
+            return
+
+        api_url = novel.get('apiConfig', {}).get('baseUrl', '')
+        api_key = novel.get('apiConfig', {}).get('apiKey', '')
+        model = novel.get('apiConfig', {}).get('model', '')
+        system_prompt = novel.get('apiConfig', {}).get('systemPrompt', '')
+        theme = novel.get('theme', '')
+        words_per_chapter = novel.get('wordsPerChapter', 3000)
+        chapters = novel.get('chapters', [])
+        chapter_count = novel.get('chapterCount', 0)
+        target = chapter_count if chapter_count and chapter_count > 0 else 500
+
+        completed = [c for c in chapters if c.get('status') == 'completed' and c.get('id') != chapter_id]
+        previous_summary = '\n\n'.join(
+            [f"第{c['id']}章「{c.get('title', '')}」：{c.get('content', '')[-500:]}" for c in completed[-3:]]
+        )
+
+        update_novel(novel_id, lambda n: n.update({
+            'status': 'generating',
+            'updatedAt': now_str(),
+            'error': '',
+            'chapters': [
+                {**c, 'status': 'writing', 'content': '', 'wordCount': 0} if c.get('id') == chapter_id else c
+                for c in n.get('chapters', [])
+            ],
+        }))
+
+        try:
+            plan_prompt = (
+                f'【小说主题】\n{theme}\n\n'
+                f'【任务】\n这是第 {chapter_id} 章，总共 {target} 章。请重新规划这一章的内容。\n\n'
+            )
+            if previous_summary:
+                plan_prompt += f'【前文摘要】\n{previous_summary}\n\n'
+            plan_prompt += (
+                '请用最简短、最直接的话，写出这一章要写什么。\n'
+                '不要废话，不要绕弯子，直接说清楚：\n'
+                '- 这一章的核心事件是什么\n'
+                '- 主角要干什么、遇到什么、怎么解决\n'
+                '- 章节标题是什么\n\n'
+                '严格按以下格式输出：\n'
+                '标题：xxx\n'
+                '内容：xxx'
+            )
+
+            plan_text = api_request(
+                api_url, api_key, model,
+                [
+                    {'role': 'system', 'content': '你是一个小说大纲策划师。你的任务是用最简短直接的话规划每一章的内容。不要废话，不要文学性描述，只要说清楚这一章写什么。'},
+                    {'role': 'user', 'content': plan_prompt},
+                ],
+                max_tokens=800,
+                temperature=0.7,
+            )
+
+            title = ''
+            plan = plan_text.strip()
+            for line in plan_text.splitlines():
+                line = line.strip()
+                if line.startswith('标题：') or line.startswith('标题:'):
+                    title = line.split('：', 1)[-1].split(':', 1)[-1].strip()
+                if line.startswith('内容：') or line.startswith('内容:'):
+                    plan = line.split('：', 1)[-1].split(':', 1)[-1].strip()
+            if not title:
+                title = f'第{chapter_id}章'
+
+            update_novel(novel_id, lambda n: n.update({
+                'chapters': [
+                    {**c, 'title': title, 'plan': plan} if c.get('id') == chapter_id else c
+                    for c in n.get('chapters', [])
+                ],
+                'updatedAt': now_str(),
+            }))
+
+            content_prompt = (
+                f'【小说主题】\n{theme}\n\n'
+                f'【本章任务】\n这是第 {chapter_id} 章，总共 {target} 章。\n'
+                f'本章要求字数：{words_per_chapter} 字以上。\n\n'
+                f'【本章大纲】\n{plan}\n\n'
+            )
+            if previous_summary:
+                content_prompt += f'【前文摘要】（确保剧情连贯）\n{previous_summary[-1500:]}\n\n'
+            content_prompt += (
+                '请严格按照上面的大纲创作本章正文。\n'
+                '要求：\n'
+                '1. 先输出章节标题，格式：第X章：标题\n'
+                '2. 然后换行输出正文\n'
+                '3. 正文必须紧扣大纲内容\n'
+                '4. 情节紧凑、描写生动、对话自然\n'
+                f'5. 字数必须达到 {words_per_chapter} 字以上，只多不少'
+            )
+
+            content_text = api_request(
+                api_url, api_key, model,
+                [
+                    {
+                        'role': 'system',
+                        'content': system_prompt or (
+                            '你是一位专业的中文网络小说作家。\n\n'
+                            '【核心规则】\n'
+                            '1. 严格按照提供的大纲创作，不要偏离主题\n'
+                            '2. 每章字数必须达到要求，只多不少\n'
+                            '3. 情节紧凑、描写生动、对话自然\n'
+                            '4. 章节间剧情必须连贯\n'
+                            '5. 不要在章节开头重复小说标题\n\n'
+                            '【输出格式】\n'
+                            '第X章：章节标题\n\n'
+                            '（正文内容，段落分明）'
+                        ),
+                    },
+                    {'role': 'user', 'content': content_prompt},
+                ],
+                max_tokens=max(2048, int(words_per_chapter * 2)),
+                temperature=0.85,
+            )
+
+            final_title = title
+            final_content = content_text.strip()
+            for line in content_text.splitlines():
+                line = line.strip()
+                if line.startswith('第') and '章' in line and '：' in line:
+                    final_title = line.split('：', 1)[-1].strip()
+                    final_content = content_text.split('\n', 1)[-1].strip()
+                    break
+                if line.startswith('第') and '章' in line and ':' in line:
+                    final_title = line.split(':', 1)[-1].strip()
+                    final_content = content_text.split('\n', 1)[-1].strip()
+                    break
+
+            final_word_count = len(final_content.replace(' ', '').replace('\n', ''))
+
+            with store_lock:
+                _, _, novel = find_novel(novel_id)
+                if not novel:
+                    return
+                new_chapters = []
+                for c in novel.get('chapters', []):
+                    if c.get('id') == chapter_id:
+                        new_chapters.append({
+                            'id': chapter_id,
+                            'title': final_title,
+                            'content': final_content,
+                            'wordCount': final_word_count,
+                            'plan': plan,
+                            'status': 'completed',
+                        })
+                    else:
+                        new_chapters.append(c)
+                all_completed = all(c.get('status') == 'completed' for c in new_chapters)
+                new_status = 'completed' if all_completed else novel.get('status', 'generating')
+                update_novel(novel_id, lambda n: n.update({'chapters': new_chapters, 'status': new_status, 'updatedAt': now_str()}))
+
+        except Exception as exc:
+            update_novel(novel_id, lambda n: n.update({
+                'status': 'error',
+                'updatedAt': now_str(),
+                'error': f'重新生成第{chapter_id}章失败: {exc}',
+            }))
+    finally:
+        with store_lock:
+            active_jobs.pop(f'{novel_id}_ch{chapter_id}', None)
+
+
 class AppHandler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
@@ -369,6 +537,44 @@ class AppHandler(BaseHTTPRequestHandler):
                 history = load_history()
                 new_history = [h for h in history if h.get('id') != novel_id]
                 save_history(new_history)
+            return self.json_ok({'ok': True})
+
+        if path == '/api/novels/regenerate-chapter':
+            body = self.read_json()
+            novel_id = body.get('novelId')
+            chapter_id = body.get('chapterId')
+            if not novel_id or not chapter_id:
+                return self.json_error(400, 'novelId and chapterId required')
+            job_key = f'{novel_id}_ch{chapter_id}'
+            with store_lock:
+                if job_key in active_jobs:
+                    return self.json_error(409, 'already regenerating')
+            thread = threading.Thread(target=run_chapter_regen_job, args=(novel_id, chapter_id), daemon=True)
+            with store_lock:
+                active_jobs[job_key] = thread
+            thread.start()
+            return self.json_ok({'ok': True, 'jobKey': job_key})
+
+        if path == '/api/novels/regenerate':
+            body = self.read_json()
+            novel_id = body.get('id')
+            if not novel_id:
+                return self.json_error(400, 'id required')
+            with store_lock:
+                history = load_history()
+                target = None
+                for h in history:
+                    if h.get('id') == novel_id:
+                        target = h
+                        break
+                if not target:
+                    return self.json_error(404, 'not found')
+                target['chapters'] = []
+                target['status'] = 'generating'
+                target['updatedAt'] = now_str()
+                target['error'] = ''
+                save_history(history)
+            start_job(target)
             return self.json_ok({'ok': True})
 
         return self.json_error(404, 'not found')
