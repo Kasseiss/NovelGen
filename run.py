@@ -133,6 +133,9 @@ def run_generation_job(novel_id):
             chapter_count = novel.get('chapterCount', 0)
             target = chapter_count if chapter_count and chapter_count > 0 else 500
 
+            chapters = [c for c in chapters if c.get('status') != 'error']
+            update_novel(novel_id, lambda n: n.update({'chapters': chapters}))
+
             completed = [c for c in chapters if c.get('status') == 'completed']
             if len(completed) >= target:
                 update_novel(novel_id, lambda n: n.update({'status': 'completed', 'updatedAt': now_str()}))
@@ -570,6 +573,32 @@ class AppHandler(BaseHTTPRequestHandler):
                 if not target:
                     return self.json_error(404, 'not found')
                 target['chapters'] = []
+                target['status'] = 'generating'
+                target['updatedAt'] = now_str()
+                target['error'] = ''
+                save_history(history)
+            start_job(target)
+            return self.json_ok({'ok': True})
+
+        if path == '/api/novels/continue':
+            body = self.read_json()
+            novel_id = body.get('id')
+            if not novel_id:
+                return self.json_error(400, 'id required')
+            with store_lock:
+                history = load_history()
+                target = None
+                for h in history:
+                    if h.get('id') == novel_id:
+                        target = h
+                        break
+                if not target:
+                    return self.json_error(404, 'not found')
+                for c in target.get('chapters', []):
+                    if c.get('status') in ('writing', 'planning'):
+                        c['status'] = 'error'
+                        c['content'] = c.get('content', '') or ''
+                        c['wordCount'] = len(c.get('content', '').replace(' ', '').replace('\n', ''))
                 target['status'] = 'generating'
                 target['updatedAt'] = now_str()
                 target['error'] = ''

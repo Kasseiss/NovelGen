@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../store';
-import { Loader2, Sparkles, AlertCircle, FileText, BookOpen, RotateCcw, Eye, RefreshCw } from 'lucide-react';
+import { Loader2, Sparkles, AlertCircle, FileText, BookOpen, RotateCcw, Eye, RefreshCw, Play } from 'lucide-react';
 import { NovelRecord } from '../types';
 
 export default function GeneratingPanel() {
@@ -48,6 +48,21 @@ export default function GeneratingPanel() {
     setRegenLoading(true);
     try {
       await fetch('/api/novels/regenerate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentRecordId }),
+      });
+      window.location.reload();
+    } catch {
+      setRegenLoading(false);
+    }
+  };
+
+  const handleContinue = async () => {
+    if (!currentRecordId || regenLoading) return;
+    setRegenLoading(true);
+    try {
+      await fetch('/api/novels/continue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: currentRecordId }),
@@ -109,7 +124,16 @@ export default function GeneratingPanel() {
 
       {remote?.error && (
         <div className="mx-4 sm:mx-6 mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 text-red-400 text-sm">
-          <AlertCircle className="w-4 h-4 shrink-0" />{remote.error}
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span className="flex-1">{remote.error}</span>
+          <button
+            onClick={handleContinue}
+            disabled={regenLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-xs transition-colors disabled:opacity-50"
+          >
+            {regenLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+            继续生成
+          </button>
         </div>
       )}
 
