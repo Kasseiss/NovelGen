@@ -1,24 +1,28 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, BookOpen, RotateCcw, Loader2 } from 'lucide-react';
 import { useStore } from '../store';
 
 export default function ReaderPanel() {
   const chapters = useStore((s) => s.chapters);
+  const currentChapterId = useStore((s) => s.currentChapterId);
+  const setCurrentChapterId = useStore((s) => s.setCurrentChapterId);
   const setView = useStore((s) => s.setView);
   const currentRecordId = useStore((s) => s.currentRecordId);
   const setSelectedNovel = useStore((s) => s.setSelectedNovel);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [currentChapterId, setCurrentChapterId] = useState<number>(() => {
-    const completed = chapters.filter(c => c.status === 'completed');
-    return completed.length ? completed[0].id : 0;
-  });
   const [regeneratingId, setRegeneratingId] = useState<number | null>(null);
+  const touchStartX = useRef<number | null>(null);
 
-  useEffect(() => {
-    if (chapters.length) {
-      setCurrentChapterId((prev) => (prev ? prev : chapters[0].id));
-    }
-  }, [chapters]);
+  const completedChapters = chapters.filter(c => c.status === 'completed');
+  const completedIndex = completedChapters.findIndex((c) => c.id === currentChapterId);
+
+  const goToPrev = useCallback(() => {
+    if (completedIndex > 0) setCurrentChapterId(completedChapters[completedIndex - 1].id);
+  }, [completedIndex, completedChapters, setCurrentChapterId]);
+
+  const goToNext = useCallback(() => {
+    if (completedIndex < completedChapters.length - 1) setCurrentChapterId(completedChapters[completedIndex + 1].id);
+  }, [completedIndex, completedChapters, setCurrentChapterId]);
 
   useEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;
@@ -27,24 +31,29 @@ export default function ReaderPanel() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      const completedChapters = chapters.filter(c => c.status === 'completed');
-      const idx = completedChapters.findIndex((c) => c.id === currentChapterId);
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        if (idx > 0) setCurrentChapterId(completedChapters[idx - 1].id);
-      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-        e.preventDefault();
-        if (idx < completedChapters.length - 1) setCurrentChapterId(completedChapters[idx + 1].id);
-      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); goToPrev(); }
+      else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); goToNext(); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [chapters, currentChapterId]);
+  }, [goToPrev, goToNext]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) < 60) return;
+    if (dx > 0) goToPrev();
+    else goToNext();
+  };
 
   const currentChapter = chapters.find((c) => c.id === currentChapterId);
-  const currentIndex = chapters.findIndex((c) => c.id === currentChapterId);
-  const hasPrev = currentIndex > 0;
-  const hasNext = currentIndex < chapters.length - 1;
+  const hasPrev = completedIndex > 0;
+  const hasNext = completedIndex < completedChapters.length - 1;
 
   const handleRegenChapter = async () => {
     if (!currentRecordId || !currentChapterId || regeneratingId) return;
@@ -75,7 +84,7 @@ export default function ReaderPanel() {
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div className="px-4 sm:px-8 py-4 sm:py-6 border-b border-ink-800">
+      <div className="px-4 sm:px-8 py-4 sm:py-6 border-b border-ink-800 shrink-0">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-xl sm:text-2xl font-bold text-gold-400 font-serif">
@@ -94,7 +103,12 @@ export default function ReaderPanel() {
         </div>
       </div>
 
-      <div ref={contentRef} className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6">
+      <div
+        ref={contentRef}
+        className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <div className="max-w-3xl mx-auto reading-content text-ink-100">
           {currentChapter.content.split('\n').map((paragraph, idx) => (
             paragraph.trim() ? <p key={idx}>{paragraph}</p> : null
@@ -102,14 +116,14 @@ export default function ReaderPanel() {
         </div>
       </div>
 
-      <div className="px-4 sm:px-8 py-3 sm:py-4 border-t border-ink-800">
+      <div className="px-4 sm:px-8 py-3 sm:py-4 border-t border-ink-800 shrink-0">
         <div className="flex items-center justify-between max-w-3xl mx-auto">
-          <button onClick={() => hasPrev && setCurrentChapterId(chapters[currentIndex - 1].id)} disabled={!hasPrev} className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-all ${hasPrev ? 'text-ink-300 hover:text-gold-400 hover:bg-ink-900' : 'text-ink-700 cursor-not-allowed'}`}>
-            <ChevronLeft className="w-4 h-4" /><span className="hidden sm:inline">上一章</span>
+          <button onClick={goToPrev} disabled={!hasPrev} className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-all ${hasPrev ? 'text-ink-300 hover:text-gold-400 hover:bg-ink-900 active:bg-ink-800' : 'text-ink-700 cursor-not-allowed'}`}>
+            <ChevronLeft className="w-5 h-5" /><span className="text-sm">上一章</span>
           </button>
-          <span className="text-xs text-ink-600">{currentIndex + 1} / {chapters.length}</span>
-          <button onClick={() => hasNext && setCurrentChapterId(chapters[currentIndex + 1].id)} disabled={!hasNext} className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-all ${hasNext ? 'text-ink-300 hover:text-gold-400 hover:bg-ink-900' : 'text-ink-700 cursor-not-allowed'}`}>
-            <span className="hidden sm:inline">下一章</span><ChevronRight className="w-4 h-4" />
+          <span className="text-xs text-ink-600">{completedIndex + 1} / {completedChapters.length}</span>
+          <button onClick={goToNext} disabled={!hasNext} className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-all ${hasNext ? 'text-ink-300 hover:text-gold-400 hover:bg-ink-900 active:bg-ink-800' : 'text-ink-700 cursor-not-allowed'}`}>
+            <span className="text-sm">下一章</span><ChevronRight className="w-5 h-5" />
           </button>
         </div>
       </div>
