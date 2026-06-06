@@ -20,6 +20,8 @@ BASE_DIR = Path(__file__).parent.resolve()
 DIST_DIR = BASE_DIR / 'dist'
 DATA_DIR = BASE_DIR / 'data'
 HISTORY_FILE = DATA_DIR / 'history.json'
+NOVELS_DIR = DATA_DIR / 'novels'
+API_KEYS_FILE = BASE_DIR / 'api_keys.json'
 NODE_DIR = BASE_DIR / '.node'
 NODE_VERSION = 'v20.18.0'
 
@@ -37,6 +39,93 @@ active_jobs = {}
 
 def ensure_dirs():
     DATA_DIR.mkdir(exist_ok=True)
+    NOVELS_DIR.mkdir(exist_ok=True)
+
+
+def get_novel_file(novel_id):
+    return NOVELS_DIR / f'{novel_id}.json'
+
+
+def load_api_keys():
+    if API_KEYS_FILE.exists():
+        try:
+            return json.loads(API_KEYS_FILE.read_text(encoding='utf-8'))
+        except Exception:
+            return {}
+    return {}
+
+
+def save_api_keys(keys):
+    API_KEYS_FILE.write_text(json.dumps(keys, ensure_ascii=False, indent=2), encoding='utf-8')
+
+
+def load_novel(novel_id):
+    file = get_novel_file(novel_id)
+    if file.exists():
+        try:
+            novel = json.loads(file.read_text(encoding='utf-8'))
+        except Exception:
+            return None
+        api_keys = load_api_keys()
+        if novel_id in api_keys:
+            novel['apiConfig'] = api_keys[novel_id]
+        return novel
+    if HISTORY_FILE.exists():
+        try:
+            history = json.loads(HISTORY_FILE.read_text(encoding='utf-8'))
+            for item in history:
+                if item.get('id') == novel_id and 'chapters' in item:
+                    novel = dict(item)
+                    api_keys = load_api_keys()
+                    if novel_id in api_keys:
+                        novel['apiConfig'] = api_keys[novel_id]
+                    save_novel(novel)
+                    return novel
+        except Exception:
+            pass
+    return None
+
+
+def save_novel(novel):
+    novel_id = novel['id']
+    file = get_novel_file(novel_id)
+    data = {k: v for k, v in novel.items() if k != 'apiConfig'}
+    file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+    if 'apiConfig' in novel:
+        api_keys = load_api_keys()
+        api_keys[novel_id] = novel['apiConfig']
+        save_api_keys(api_keys)
+
+
+def delete_novel_file(novel_id):
+    file = get_novel_file(novel_id)
+    if file.exists():
+        file.unlink()
+    api_keys = load_api_keys()
+    if novel_id in api_keys:
+        api_keys.pop(novel_id, None)
+        save_api_keys(api_keys)
+
+
+def extract_chapter_meta(chapters):
+    return [
+        {'id': c['id'], 'title': c.get('title', ''), 'status': c.get('status', ''), 'wordCount': c.get('wordCount', 0)}
+        for c in chapters
+    ]
+
+
+def novel_to_history_item(novel):
+    return {
+        'id': novel['id'],
+        'theme': novel.get('theme', ''),
+        'status': novel.get('status', ''),
+        'chapterCount': novel.get('chapterCount', 0),
+        'wordsPerChapter': novel.get('wordsPerChapter', 3000),
+        'createdAt': novel.get('createdAt', ''),
+        'updatedAt': novel.get('updatedAt', ''),
+        'error': novel.get('error', ''),
+        'chapterMeta': extract_chapter_meta(novel.get('chapters', [])),
+    }
 
 
 def load_history():
@@ -63,22 +152,24 @@ def replace_history(data):
 
 
 def find_novel(novel_id):
+    novel = load_novel(novel_id)
     history = load_history()
     for i, item in enumerate(history):
         if item.get('id') == novel_id:
-            return history, i, item
-    return history, -1, None
+            return history, i, novel if novel else item
+    return history, -1, novel
 
 
 def update_novel(novel_id, updater):
     with store_lock:
-        history, idx, item = find_novel(novel_id)
-        if idx == -1:
+        history, idx, novel = find_novel(novel_id)
+        if idx == -1 or novel is None:
             return None
-        updater(item)
-        history[idx] = item
+        updater(novel)
+        save_novel(novel)
+        history[idx] = novel_to_history_item(novel)
         save_history(history)
-        return item
+        return novel
 
 
 def start_job(novel):
@@ -484,10 +575,9 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.json_ok(get_history())
         if path.startswith('/api/novels/') and len(path.split('/')) == 4:
             novel_id = path.split('/')[3]
-            history = get_history()
-            for item in history:
-                if item.get('id') == novel_id:
-                    return self.json_ok(item)
+            novel = load_novel(novel_id)
+            if novel:
+                return self.json_ok(novel)
             return self.json_error(404, 'novel not found')
 
         return self.serve_static(path)
@@ -526,8 +616,9 @@ class AppHandler(BaseHTTPRequestHandler):
             }
 
             history = get_history()
-            history.insert(0, novel)
+            history.insert(0, novel_to_history_item(novel))
             replace_history(history)
+            save_novel(novel)
             start_job(novel)
             return self.json_ok(novel, 201)
 
@@ -540,6 +631,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 history = load_history()
                 new_history = [h for h in history if h.get('id') != novel_id]
                 save_history(new_history)
+                delete_novel_file(novel_id)
             return self.json_ok({'ok': True})
 
         if path == '/api/novels/regenerate-chapter':
@@ -564,20 +656,21 @@ class AppHandler(BaseHTTPRequestHandler):
             if not novel_id:
                 return self.json_error(400, 'id required')
             with store_lock:
-                history = load_history()
-                target = None
-                for h in history:
-                    if h.get('id') == novel_id:
-                        target = h
-                        break
-                if not target:
+                novel = load_novel(novel_id)
+                if not novel:
                     return self.json_error(404, 'not found')
-                target['chapters'] = []
-                target['status'] = 'generating'
-                target['updatedAt'] = now_str()
-                target['error'] = ''
+                novel['chapters'] = []
+                novel['status'] = 'generating'
+                novel['updatedAt'] = now_str()
+                novel['error'] = ''
+                save_novel(novel)
+                history = load_history()
+                for i, h in enumerate(history):
+                    if h.get('id') == novel_id:
+                        history[i] = novel_to_history_item(novel)
+                        break
                 save_history(history)
-            start_job(target)
+            start_job(novel)
             return self.json_ok({'ok': True})
 
         if path == '/api/novels/continue':
@@ -586,24 +679,25 @@ class AppHandler(BaseHTTPRequestHandler):
             if not novel_id:
                 return self.json_error(400, 'id required')
             with store_lock:
-                history = load_history()
-                target = None
-                for h in history:
-                    if h.get('id') == novel_id:
-                        target = h
-                        break
-                if not target:
+                novel = load_novel(novel_id)
+                if not novel:
                     return self.json_error(404, 'not found')
-                for c in target.get('chapters', []):
+                for c in novel.get('chapters', []):
                     if c.get('status') in ('writing', 'planning'):
                         c['status'] = 'error'
                         c['content'] = c.get('content', '') or ''
                         c['wordCount'] = len(c.get('content', '').replace(' ', '').replace('\n', ''))
-                target['status'] = 'generating'
-                target['updatedAt'] = now_str()
-                target['error'] = ''
+                novel['status'] = 'generating'
+                novel['updatedAt'] = now_str()
+                novel['error'] = ''
+                save_novel(novel)
+                history = load_history()
+                for i, h in enumerate(history):
+                    if h.get('id') == novel_id:
+                        history[i] = novel_to_history_item(novel)
+                        break
                 save_history(history)
-            start_job(target)
+            start_job(novel)
             return self.json_ok({'ok': True})
 
         return self.json_error(404, 'not found')
@@ -744,6 +838,50 @@ def npm_build_if_needed():
     subprocess.run([node_path, npm_path, 'run', 'build'], cwd=BASE_DIR, check=True)
 
 
+def migrate_data():
+    if not HISTORY_FILE.exists():
+        return
+    try:
+        history = json.loads(HISTORY_FILE.read_text(encoding='utf-8'))
+    except Exception:
+        return
+    needs_migration = any('chapters' in item or 'apiConfig' in item for item in history)
+    if not needs_migration:
+        return
+    NOVELS_DIR.mkdir(exist_ok=True)
+    api_keys = load_api_keys()
+    new_history = []
+    for item in history:
+        novel_id = item.get('id')
+        if not novel_id:
+            continue
+        novel_file = get_novel_file(novel_id)
+        if not novel_file.exists() and ('chapters' in item or 'apiConfig' in item):
+            full_novel = dict(item)
+            if 'apiConfig' in full_novel:
+                api_keys[novel_id] = full_novel.pop('apiConfig')
+            data = {k: v for k, v in full_novel.items() if k != 'apiConfig'}
+            novel_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+        if 'apiConfig' in item and novel_id not in api_keys:
+            api_keys[novel_id] = item['apiConfig']
+        if 'chapterMeta' not in item:
+            if novel_file.exists():
+                try:
+                    novel_data = json.loads(novel_file.read_text(encoding='utf-8'))
+                    meta = novel_to_history_item(novel_data)
+                except Exception:
+                    meta = novel_to_history_item(item)
+            else:
+                meta = novel_to_history_item(item)
+            new_history.append(meta)
+        else:
+            clean = {k: v for k, v in item.items() if k not in ('chapters', 'apiConfig')}
+            new_history.append(clean)
+    save_history(new_history)
+    if api_keys:
+        save_api_keys(api_keys)
+
+
 def restore_generating_jobs():
     history = get_history()
     for item in history:
@@ -779,6 +917,8 @@ def run_server(host, port):
 if __name__ == '__main__':
     ensure_dirs()
     print('初始化完成', flush=True)
+    migrate_data()
+    print('数据迁移检查完成', flush=True)
     npm_build_if_needed()
     print('构建检查完成', flush=True)
     restore_generating_jobs()
