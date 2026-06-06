@@ -8,7 +8,10 @@ export default function ReaderPanel() {
   const currentRecordId = useStore((s) => s.currentRecordId);
   const setSelectedNovel = useStore((s) => s.setSelectedNovel);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [currentChapterId, setCurrentChapterId] = useState<number>(chapters.length ? chapters[0].id : 0);
+  const [currentChapterId, setCurrentChapterId] = useState<number>(() => {
+    const completed = chapters.filter(c => c.status === 'completed');
+    return completed.length ? completed[0].id : 0;
+  });
   const [regeneratingId, setRegeneratingId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -24,13 +27,14 @@ export default function ReaderPanel() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      const idx = chapters.findIndex((c) => c.id === currentChapterId);
+      const completedChapters = chapters.filter(c => c.status === 'completed');
+      const idx = completedChapters.findIndex((c) => c.id === currentChapterId);
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         e.preventDefault();
-        if (idx > 0) setCurrentChapterId(chapters[idx - 1].id);
+        if (idx > 0) setCurrentChapterId(completedChapters[idx - 1].id);
       } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
         e.preventDefault();
-        if (idx < chapters.length - 1) setCurrentChapterId(chapters[idx + 1].id);
+        if (idx < completedChapters.length - 1) setCurrentChapterId(completedChapters[idx + 1].id);
       }
     };
     window.addEventListener('keydown', handleKeyDown);

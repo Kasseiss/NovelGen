@@ -62,11 +62,14 @@ export const useStore = create<AppState & {
   setCurrentChapterId: (id) => set({ currentChapterId: id }),
   setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
 
-  setSelectedNovel: (novel) => set({
-    selectedNovel: novel,
-    chapters: novel?.chapters || [],
-    currentChapterId: novel?.chapters?.length ? Math.max(...novel.chapters.map((c) => c.id)) : 0,
-    currentRecordId: novel?.id || null,
-    isGenerating: novel?.status === 'generating',
-  }),
+  setSelectedNovel: (novel) => {
+    const completedChapters = novel?.chapters?.filter(c => c.status === 'completed') || [];
+    set({
+      selectedNovel: novel,
+      chapters: novel?.chapters || [],
+      currentChapterId: completedChapters.length ? completedChapters[0].id : 0,
+      currentRecordId: novel?.id || null,
+      isGenerating: novel?.status === 'generating',
+    });
+  },
 }));

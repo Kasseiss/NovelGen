@@ -24,10 +24,15 @@ export default function GeneratingPanel() {
         if (stop) return;
         setRemote(data);
         setSelectedNovel(data);
+        if (data.status !== 'generating') {
+          stop = true;
+        }
       } catch {}
     };
     load();
-    const timer = setInterval(load, 3000);
+    const timer = setInterval(() => {
+      if (!stop) load();
+    }, 3000);
     return () => { stop = true; clearInterval(timer); };
   }, [currentRecordId, setSelectedNovel]);
 
@@ -53,7 +58,10 @@ export default function GeneratingPanel() {
         body: JSON.stringify({ id: currentRecordId }),
       });
       setRemote((prev) => prev ? { ...prev, status: 'generating', chapters: [], error: '' } : null);
-      setSelectedNovel({ ...useStore.getState().selectedNovel!, status: 'generating', chapters: [], error: '' });
+      const currentNovel = useStore.getState().selectedNovel;
+      if (currentNovel) {
+        setSelectedNovel({ ...currentNovel, status: 'generating', chapters: [], error: '' });
+      }
       setRegenLoading(false);
     } catch {
       setRegenLoading(false);
@@ -70,7 +78,10 @@ export default function GeneratingPanel() {
         body: JSON.stringify({ id: currentRecordId }),
       });
       setRemote((prev) => prev ? { ...prev, status: 'generating', error: '' } : null);
-      setSelectedNovel({ ...useStore.getState().selectedNovel!, status: 'generating', error: '' });
+      const currentNovel = useStore.getState().selectedNovel;
+      if (currentNovel) {
+        setSelectedNovel({ ...currentNovel, status: 'generating', error: '' });
+      }
       setRegenLoading(false);
     } catch {
       setRegenLoading(false);

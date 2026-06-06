@@ -35,7 +35,20 @@ export default function HistoryPanel() {
     setRecords(await resp.json());
   };
 
-  const openNovel = (item: NovelRecord) => {
+  const openNovel = async (item: NovelRecord) => {
+    try {
+      const resp = await fetch(`/api/novels/${item.id}`);
+      const fullNovel = await resp.json();
+      if (fullNovel && !fullNovel.error) {
+        setSelectedNovel(fullNovel);
+        if (fullNovel.status === 'generating' || fullNovel.status === 'error') {
+          setView('generating');
+        } else {
+          setView('reading');
+        }
+        return;
+      }
+    } catch {}
     setSelectedNovel(item);
     if (item.status === 'generating' || item.status === 'error') {
       setView('generating');

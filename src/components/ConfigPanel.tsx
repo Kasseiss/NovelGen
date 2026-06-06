@@ -101,8 +101,17 @@ export default function ConfigPanel() {
       return;
     }
 
-    const chapterCount = parseInt(localChapterCount) || 0;
-    const wordsPerChapter = parseInt(localWordsPerChapter) || 3000;
+    const chapterCount = localChapterCount === '' ? 0 : Math.max(0, parseInt(localChapterCount) || 0);
+    const wordsPerChapter = localWordsPerChapter === '' ? 3000 : parseInt(localWordsPerChapter) || 0;
+
+    if (localChapterCount !== '' && parseInt(localChapterCount) < 0) {
+      showToast('章节数不能为负数', 'error');
+      return;
+    }
+    if (wordsPerChapter < 1) {
+      showToast('每章字数必须大于0', 'error');
+      return;
+    }
 
     setNovelConfig({
       theme: localTheme,
@@ -183,8 +192,12 @@ export default function ConfigPanel() {
               <input
                 type="text"
                 value={localChapterCount}
-                onChange={(e) => setLocalChapterCount(e.target.value)}
-                className="w-full bg-ink-950 border border-ink-800 rounded-lg px-4 py-2.5 text-ink-50 focus:outline-none focus:border-gold-400/50 focus:ring-1 focus:ring-gold-400/20 transition-all"
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, '');
+                  setLocalChapterCount(v);
+                }}
+                placeholder="留空=无限生成"
+                className="w-full bg-ink-950 border border-ink-800 rounded-lg px-4 py-2.5 text-ink-50 placeholder-ink-600 focus:outline-none focus:border-gold-400/50 focus:ring-1 focus:ring-gold-400/20 transition-all"
               />
               <p className="text-ink-600 text-xs mt-1">0 = 无限生成</p>
             </div>
@@ -193,8 +206,12 @@ export default function ConfigPanel() {
               <input
                 type="text"
                 value={localWordsPerChapter}
-                onChange={(e) => setLocalWordsPerChapter(e.target.value)}
-                className="w-full bg-ink-950 border border-ink-800 rounded-lg px-4 py-2.5 text-ink-50 focus:outline-none focus:border-gold-400/50 focus:ring-1 focus:ring-gold-400/20 transition-all"
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, '');
+                  setLocalWordsPerChapter(v);
+                }}
+                placeholder="留空=3000字"
+                className="w-full bg-ink-950 border border-ink-800 rounded-lg px-4 py-2.5 text-ink-50 placeholder-ink-600 focus:outline-none focus:border-gold-400/50 focus:ring-1 focus:ring-gold-400/20 transition-all"
               />
             </div>
           </div>

@@ -186,7 +186,7 @@ def update_novel(novel_id, updater):
 def start_job(novel):
     novel_id = novel['id']
     with store_lock:
-        if novel_id in active_jobs:
+        if novel_id in active_jobs and active_jobs[novel_id].is_alive():
             return
         thread = threading.Thread(target=run_generation_job, args=(novel_id,), daemon=True)
         active_jobs[novel_id] = thread
@@ -383,14 +383,24 @@ def run_generation_job(novel_id):
                     new_chapters = []
                     for c in chapters:
                         if c.get('id') == chapter_num:
-                            new_chapters.append({
-                                'id': chapter_num,
-                                'title': final_title,
-                                'content': final_content,
-                                'wordCount': final_word_count,
-                                'plan': plan,
-                                'status': 'completed',
-                            })
+                            if not final_content or len(final_content.strip()) < 10:
+                                new_chapters.append({
+                                    'id': chapter_num,
+                                    'title': final_title,
+                                    'content': final_content or '',
+                                    'wordCount': final_word_count,
+                                    'plan': plan,
+                                    'status': 'error',
+                                })
+                            else:
+                                new_chapters.append({
+                                    'id': chapter_num,
+                                    'title': final_title,
+                                    'content': final_content,
+                                    'wordCount': final_word_count,
+                                    'plan': plan,
+                                    'status': 'completed',
+                                })
                         else:
                             new_chapters.append(c)
                     update_novel(novel_id, lambda n: n.update({'chapters': new_chapters, 'updatedAt': now_str()}))
@@ -546,14 +556,24 @@ def run_chapter_regen_job(novel_id, chapter_id):
                 new_chapters = []
                 for c in novel.get('chapters', []):
                     if c.get('id') == chapter_id:
-                        new_chapters.append({
-                            'id': chapter_id,
-                            'title': final_title,
-                            'content': final_content,
-                            'wordCount': final_word_count,
-                            'plan': plan,
-                            'status': 'completed',
-                        })
+                        if not final_content or len(final_content.strip()) < 10:
+                            new_chapters.append({
+                                'id': chapter_id,
+                                'title': final_title,
+                                'content': final_content or '',
+                                'wordCount': final_word_count,
+                                'plan': plan,
+                                'status': 'error',
+                            })
+                        else:
+                            new_chapters.append({
+                                'id': chapter_id,
+                                'title': final_title,
+                                'content': final_content,
+                                'wordCount': final_word_count,
+                                'plan': plan,
+                                'status': 'completed',
+                            })
                     else:
                         new_chapters.append(c)
                 all_completed = all(c.get('status') == 'completed' for c in new_chapters)
@@ -588,7 +608,8 @@ class AppHandler(BaseHTTPRequestHandler):
             novel_id = path.split('/')[3]
             novel = load_novel(novel_id)
             if novel:
-                return self.json_ok(novel)
+                safe = {k: v for k, v in novel.items() if k != 'apiConfig'}
+                return self.json_ok(safe)
             return self.json_error(404, 'novel not found')
 
         return self.serve_static(path)
@@ -617,8 +638,8 @@ class AppHandler(BaseHTTPRequestHandler):
                     'model': api_config.get('model', 'gpt-4'),
                     'systemPrompt': api_config.get('systemPrompt', ''),
                 },
-                'chapterCount': int(novel_config.get('chapterCount', 0) or 0),
-                'wordsPerChapter': int(novel_config.get('wordsPerChapter', 3000) or 3000),
+                'chapterCount': max(0, int(novel_config.get('chapterCount', 0) or 0)),
+                'wordsPerChapter': max(1, int(novel_config.get('wordsPerChapter', 3000) or 3000)),
                 'status': 'generating',
                 'createdAt': now_str(),
                 'updatedAt': now_str(),
@@ -631,7 +652,7 @@ class AppHandler(BaseHTTPRequestHandler):
             replace_history(history)
             save_novel(novel)
             start_job(novel)
-            return self.json_ok(novel, 201)
+            return self.json_ok({k: v for k, v in novel.items() if k != 'apiConfig'}, 201)
 
         if path == '/api/novels/delete':
             body = self.read_json()
@@ -643,6 +664,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 new_history = [h for h in history if h.get('id') != novel_id]
                 save_history(new_history)
                 delete_novel_file(novel_id)
+                active_jobs.pop(novel_id, None)
             return self.json_ok({'ok': True})
 
         if path == '/api/novels/regenerate-chapter':
