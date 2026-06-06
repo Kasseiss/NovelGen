@@ -21,7 +21,7 @@ DIST_DIR = BASE_DIR / 'dist'
 DATA_DIR = BASE_DIR / 'data'
 HISTORY_FILE = DATA_DIR / 'history.json'
 NOVELS_DIR = DATA_DIR / 'novels'
-API_KEYS_FILE = BASE_DIR / 'api_keys.json'
+API_KEYS_FILE = DATA_DIR / 'api_keys.json'
 NODE_DIR = BASE_DIR / '.node'
 NODE_VERSION = 'v20.18.0'
 
