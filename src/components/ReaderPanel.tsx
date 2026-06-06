@@ -51,7 +51,10 @@ export default function ReaderPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ novelId: currentRecordId, chapterId: currentChapterId }),
       });
+      const novel = useStore.getState().selectedNovel;
+      if (novel) setSelectedNovel({ ...novel, status: 'generating', error: '', chapters: novel.chapters.map((c) => c.id === currentChapterId ? { ...c, status: 'writing' as const, content: '', wordCount: 0 } : c) });
       setView('generating');
+      setRegeneratingId(null);
     } catch {
       setRegeneratingId(null);
     }

@@ -52,7 +52,9 @@ export default function GeneratingPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: currentRecordId }),
       });
-      window.location.reload();
+      setRemote((prev) => prev ? { ...prev, status: 'generating', chapters: [], error: '' } : null);
+      setSelectedNovel({ ...useStore.getState().selectedNovel!, status: 'generating', chapters: [], error: '' });
+      setRegenLoading(false);
     } catch {
       setRegenLoading(false);
     }
@@ -67,7 +69,9 @@ export default function GeneratingPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: currentRecordId }),
       });
-      window.location.reload();
+      setRemote((prev) => prev ? { ...prev, status: 'generating', error: '' } : null);
+      setSelectedNovel({ ...useStore.getState().selectedNovel!, status: 'generating', error: '' });
+      setRegenLoading(false);
     } catch {
       setRegenLoading(false);
     }

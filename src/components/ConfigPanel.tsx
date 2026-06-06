@@ -147,7 +147,7 @@ export default function ConfigPanel() {
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto animate-fade-in">
+    <div className="w-full max-w-3xl mx-auto p-4 sm:p-8 animate-fade-in">
       <div className="text-center mb-10">
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-gold-400/20 to-gold-600/10 border border-gold-400/20 mb-4">
           <BookOpen className="w-8 h-8 text-gold-400" />

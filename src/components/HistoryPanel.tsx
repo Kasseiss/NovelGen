@@ -37,7 +37,11 @@ export default function HistoryPanel() {
 
   const openNovel = (item: NovelRecord) => {
     setSelectedNovel(item);
-    setView(item.status === 'generating' ? 'generating' : 'reading');
+    if (item.status === 'generating' || item.status === 'error') {
+      setView('generating');
+    } else {
+      setView('reading');
+    }
   };
 
   return (
