@@ -35,6 +35,7 @@ NODE_URLS = {
 
 store_lock = threading.RLock()
 active_jobs = {}
+cancel_events = {}
 
 
 def ensure_dirs():
@@ -186,8 +187,10 @@ def update_novel(novel_id, updater):
 def start_job(novel):
     novel_id = novel['id']
     with store_lock:
-        if novel_id in active_jobs and active_jobs[novel_id].is_alive():
-            return
+        if novel_id in cancel_events:
+            cancel_events[novel_id].set()
+        active_jobs.pop(novel_id, None)
+        cancel_events[novel_id] = threading.Event()
         thread = threading.Thread(target=run_generation_job, args=(novel_id,), daemon=True)
         active_jobs[novel_id] = thread
         thread.start()
@@ -226,6 +229,11 @@ def run_generation_job(novel_id):
     try:
         update_novel(novel_id, lambda n: n.update({'status': 'generating', 'updatedAt': now_str(), 'error': ''}))
         while True:
+            with store_lock:
+                evt = cancel_events.get(novel_id)
+            if evt and evt.is_set():
+                return
+
             with store_lock:
                 _, _, novel = find_novel(novel_id)
             if not novel or novel.get('status') != 'generating':
@@ -275,6 +283,11 @@ def run_generation_job(novel_id):
                     '标题：xxx\n'
                     '内容：xxx'
                 )
+
+                with store_lock:
+                    evt = cancel_events.get(novel_id)
+                if evt and evt.is_set():
+                    return
 
                 plan_text = api_request(
                     api_url,
@@ -333,6 +346,11 @@ def run_generation_job(novel_id):
                     '4. 情节紧凑、描写生动、对话自然\n'
                     f'5. 字数必须达到 {words_per_chapter} 字以上，只多不少'
                 )
+
+                with store_lock:
+                    evt = cancel_events.get(novel_id)
+                if evt and evt.is_set():
+                    return
 
                 content_text = api_request(
                     api_url,
@@ -664,6 +682,8 @@ class AppHandler(BaseHTTPRequestHandler):
                 new_history = [h for h in history if h.get('id') != novel_id]
                 save_history(new_history)
                 delete_novel_file(novel_id)
+                if novel_id in cancel_events:
+                    cancel_events[novel_id].set()
                 active_jobs.pop(novel_id, None)
             return self.json_ok({'ok': True})
 

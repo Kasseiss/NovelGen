@@ -65,10 +65,11 @@ export const useStore = create<AppState & {
   setSelectedNovel: (novel) => set((s) => {
     const isNewNovel = novel?.id !== s.currentRecordId;
     const completedChapters = novel?.chapters?.filter(c => c.status === 'completed') || [];
+    const chaptersEmpty = !novel?.chapters || novel.chapters.length === 0;
     return {
       selectedNovel: novel,
       chapters: novel?.chapters || [],
-      currentChapterId: isNewNovel
+      currentChapterId: isNewNovel || chaptersEmpty
         ? (completedChapters.length ? completedChapters[0].id : 0)
         : (s.currentChapterId || (completedChapters.length ? completedChapters[0].id : 0)),
       currentRecordId: novel?.id || null,
