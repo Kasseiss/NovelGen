@@ -143,12 +143,23 @@ def save_history(history):
 
 def get_history():
     with store_lock:
-        return load_history()
+        history = load_history()
+        for item in history:
+            if 'chapterMeta' in item:
+                item['chapters'] = [
+                    {'id': c['id'], 'title': c.get('title', ''), 'status': c.get('status', ''), 'wordCount': c.get('wordCount', 0), 'content': '', 'plan': ''}
+                    for c in item.get('chapterMeta', [])
+                ]
+        return history
 
 
 def replace_history(data):
     with store_lock:
-        save_history(data)
+        clean = []
+        for item in data:
+            item = {k: v for k, v in item.items() if k != 'chapters'}
+            clean.append(item)
+        save_history(clean)
 
 
 def find_novel(novel_id):
