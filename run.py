@@ -243,15 +243,27 @@ def run_generation_job(novel_id):
             chapter_count = novel.get('chapterCount', 0)
             target = chapter_count if chapter_count and chapter_count > 0 else 500
 
-            chapters = [c for c in chapters if c.get('status') != 'error']
-            update_novel(novel_id, lambda n: n.update({'chapters': chapters}))
-
             completed = [c for c in chapters if c.get('status') == 'completed']
             if len(completed) >= target:
                 update_novel(novel_id, lambda n: n.update({'status': 'completed', 'updatedAt': now_str()}))
                 break
 
-            chapter_num = len(chapters) + 1
+            non_completed = [c for c in chapters if c.get('status') != 'completed']
+            if not non_completed:
+                update_novel(novel_id, lambda n: n.update({'status': 'completed', 'updatedAt': now_str()}))
+                break
+
+            chapter_num = non_completed[0]['id']
+
+            if not any(c.get('id') == chapter_num for c in chapters):
+                update_novel(novel_id, lambda n: n['chapters'].append({
+                    'id': chapter_num,
+                    'title': '',
+                    'content': '',
+                    'wordCount': 0,
+                    'plan': '',
+                    'status': 'pending',
+                }))
             previous_summary = '\n\n'.join(
                 [
                     f"第{c['id']}章「{c.get('title', '')}」：{c.get('content', '')[-500:]}"
@@ -399,8 +411,10 @@ def run_generation_job(novel_id):
                         return
                     chapters = novel.get('chapters', [])
                     new_chapters = []
+                    found = False
                     for c in chapters:
                         if c.get('id') == chapter_num:
+                            found = True
                             if not final_content or len(final_content.strip()) < 10:
                                 new_chapters.append({
                                     'id': chapter_num,
@@ -421,6 +435,25 @@ def run_generation_job(novel_id):
                                 })
                         else:
                             new_chapters.append(c)
+                    if not found:
+                        if not final_content or len(final_content.strip()) < 10:
+                            new_chapters.append({
+                                'id': chapter_num,
+                                'title': final_title,
+                                'content': final_content or '',
+                                'wordCount': final_word_count,
+                                'plan': plan,
+                                'status': 'error',
+                            })
+                        else:
+                            new_chapters.append({
+                                'id': chapter_num,
+                                'title': final_title,
+                                'content': final_content,
+                                'wordCount': final_word_count,
+                                'plan': plan,
+                                'status': 'completed',
+                            })
                     update_novel(novel_id, lambda n: n.update({'chapters': new_chapters, 'updatedAt': now_str()}))
 
             except Exception as exc:
@@ -714,9 +747,10 @@ class AppHandler(BaseHTTPRequestHandler):
                     return self.json_error(404, 'not found')
                 for c in novel.get('chapters', []):
                     if c.get('status') in ('writing', 'planning'):
-                        c['status'] = 'error'
-                        c['wordCount'] = len(c.get('content', '').replace(' ', '').replace('\n', ''))
-                novel['status'] = 'completed'
+                        c['status'] = 'pending'
+                        c['content'] = ''
+                        c['wordCount'] = 0
+                novel['status'] = 'paused'
                 novel['updatedAt'] = now_str()
                 novel['error'] = ''
                 save_novel(novel)
@@ -763,8 +797,8 @@ class AppHandler(BaseHTTPRequestHandler):
                 if not novel:
                     return self.json_error(404, 'not found')
                 for c in novel.get('chapters', []):
-                    if c.get('status') in ('writing', 'planning'):
-                        c['status'] = 'error'
+                    if c.get('status') in ('error', 'writing', 'planning'):
+                        c['status'] = 'pending'
                         c['content'] = c.get('content', '') or ''
                         c['wordCount'] = len(c.get('content', '').replace(' ', '').replace('\n', ''))
                 novel['status'] = 'generating'

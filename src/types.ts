@@ -17,7 +17,7 @@ export interface Chapter {
   content: string;
   wordCount: number;
   plan: string;
-  status: 'planning' | 'writing' | 'completed' | 'error';
+  status: 'pending' | 'planning' | 'writing' | 'completed' | 'error';
 }
 
 export type ViewState = 'config' | 'generating' | 'reading' | 'history';
@@ -28,7 +28,7 @@ export interface NovelRecord {
   apiConfig: ApiConfig;
   novelConfig: NovelConfig;
   chapters: Chapter[];
-  status: 'generating' | 'completed' | 'error';
+  status: 'generating' | 'completed' | 'error' | 'paused';
   createdAt: string;
   updatedAt: string;
   chapterCount?: number;

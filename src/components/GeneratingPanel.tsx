@@ -42,6 +42,7 @@ export default function GeneratingPanel() {
   const progress = novelConfig.chapterCount > 0 ? Math.min(100, (completedCount / novelConfig.chapterCount) * 100) : 0;
   const currentChapter = localChapters.find((c) => c.status === 'writing' || c.status === 'planning');
   const isGenerating = (remote?.status || useStore.getState().selectedNovel?.status) === 'generating';
+  const hasUncompletedChapters = localChapters.some(c => c.status !== 'completed');
 
   const handleReadChapter = (chapterId: number) => {
     setCurrentChapterId(chapterId);
@@ -98,9 +99,14 @@ export default function GeneratingPanel() {
       });
       const currentNovel = useStore.getState().selectedNovel;
       if (currentNovel) {
-        setSelectedNovel({ ...currentNovel, status: 'completed', error: '' });
+        const updatedChapters = currentNovel.chapters.map(c =>
+          c.status === 'writing' || c.status === 'planning'
+            ? { ...c, status: 'pending' as const, content: '', wordCount: 0 }
+            : c
+        );
+        setSelectedNovel({ ...currentNovel, status: 'paused', error: '', chapters: updatedChapters });
       }
-      setRemote((prev) => prev ? { ...prev, status: 'completed', error: '' } : null);
+      setRemote((prev) => prev ? { ...prev, status: 'paused', error: '' } : null);
     } catch {}
   };
 
@@ -137,7 +143,7 @@ export default function GeneratingPanel() {
                 <span className="hidden sm:inline">停止生成</span><span className="sm:hidden">停止</span>
               </button>
             )}
-            {!isGenerating && completedCount > 0 && (
+            {!isGenerating && hasUncompletedChapters && (
               <button onClick={handleContinue} disabled={regenLoading} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-gold-400/10 hover:bg-gold-400/20 text-gold-400 rounded-lg text-sm disabled:opacity-50">
                 <Play className="w-4 h-4" /><span className="hidden sm:inline">继续生成</span>
               </button>
@@ -167,14 +173,6 @@ export default function GeneratingPanel() {
         <div className="mx-4 sm:mx-6 mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 text-red-400 text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span className="flex-1">{remote.error}</span>
-          <button
-            onClick={handleContinue}
-            disabled={regenLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-xs transition-colors disabled:opacity-50"
-          >
-            {regenLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-            继续生成
-          </button>
         </div>
       )}
 
@@ -190,14 +188,17 @@ export default function GeneratingPanel() {
               <div
                 key={chapter.id}
                 className={`p-4 rounded-xl border ${
+                  chapter.status === 'pending' ? 'bg-ink-900/20 border-ink-800/30' :
                   chapter.status === 'writing' ? 'bg-gold-400/5 border-gold-400/20' :
                   chapter.status === 'completed' ? 'bg-ink-900/50 border-ink-800 hover:border-gold-400/30 cursor-pointer' :
+                  chapter.status === 'error' ? 'bg-red-500/5 border-red-500/20' :
                   'bg-ink-900/30 border-ink-800/50'
                 }`}
                 onClick={() => chapter.status === 'completed' && handleReadChapter(chapter.id)}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 min-w-0">
+                    {chapter.status === 'pending' && <div className="w-2 h-2 rounded-full bg-ink-600" />}
                     {chapter.status === 'writing' && <Loader2 className="w-4 h-4 text-gold-400 animate-spin" />}
                     {chapter.status === 'completed' && <div className="w-2 h-2 rounded-full bg-emerald-500" />}
                     <span className={`${chapter.status === 'completed' ? 'text-ink-200' : 'text-gold-400'} truncate`}>
@@ -211,6 +212,7 @@ export default function GeneratingPanel() {
                     {chapter.status === 'completed' && <span className="text-xs text-ink-500">{chapter.wordCount} 字</span>}
                   </div>
                 </div>
+                {chapter.status === 'pending' && <p className="text-sm text-ink-600 mt-2">等待生成...</p>}
                 {chapter.status === 'writing' && <p className="text-sm text-ink-500 mt-2">正在写作中...</p>}
                 {chapter.plan && (
                   <div className="mt-2 p-2 bg-ink-950/50 rounded-lg">

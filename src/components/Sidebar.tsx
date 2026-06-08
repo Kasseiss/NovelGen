@@ -21,6 +21,8 @@ function SidebarContent() {
     switch (status) {
       case 'completed':
         return <div className="w-2 h-2 rounded-full bg-emerald-500" />;
+      case 'pending':
+        return <div className="w-2 h-2 rounded-full bg-ink-600" />;
       case 'planning':
         return <Loader2 className="w-3 h-3 text-amber-400 animate-spin" />;
       case 'writing':
@@ -67,7 +69,7 @@ function SidebarContent() {
                     第{chapter.id}章
                   </p>
                   <p className="text-xs text-ink-600 truncate">
-                    {chapter.title || (chapter.status === 'planning' ? '规划中...' : chapter.status === 'writing' ? '写作中...' : '等待生成')}
+                    {chapter.title || (chapter.status === 'planning' ? '规划中...' : chapter.status === 'writing' ? '写作中...' : chapter.status === 'pending' ? '等待生成' : '等待生成')}
                   </p>
                 </div>
                 {chapter.status === 'completed' && <Eye className="w-3.5 h-3.5 text-ink-600" />}

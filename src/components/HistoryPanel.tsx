@@ -41,7 +41,7 @@ export default function HistoryPanel() {
       const fullNovel = await resp.json();
       if (fullNovel && !fullNovel.error) {
         setSelectedNovel(fullNovel);
-        if (fullNovel.status === 'generating' || fullNovel.status === 'error') {
+        if (fullNovel.status === 'generating' || fullNovel.status === 'error' || fullNovel.status === 'paused') {
           setView('generating');
         } else {
           setView('reading');
@@ -50,7 +50,7 @@ export default function HistoryPanel() {
       }
     } catch {}
     setSelectedNovel(item);
-    if (item.status === 'generating' || item.status === 'error') {
+    if (item.status === 'generating' || item.status === 'error' || item.status === 'paused') {
       setView('generating');
     } else {
       setView('reading');
@@ -120,7 +120,7 @@ export default function HistoryPanel() {
                       </div>
 
                       <div className="flex items-center gap-4 text-xs text-ink-500 mb-3">
-                        {isGenerating ? <span className="text-amber-400">正在后台生成...</span> : record.status === 'error' ? <span className="text-red-400">生成失败</span> : <span>{record.updatedAt}</span>}
+                        {isGenerating ? <span className="text-amber-400">正在后台生成...</span> : record.status === 'error' ? <span className="text-red-400">生成失败</span> : record.status === 'paused' ? <span className="text-ink-400">已暂停</span> : <span>{record.updatedAt}</span>}
                         <span>{completedChapters} 章</span>
                         <span>{totalWords.toLocaleString()} 字</span>
                         <span>{record.chapterCount > 0 ? `${record.chapterCount} 章目标` : '无限模式'}</span>
