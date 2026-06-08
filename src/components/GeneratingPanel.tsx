@@ -137,6 +137,11 @@ export default function GeneratingPanel() {
                 <span className="hidden sm:inline">停止生成</span><span className="sm:hidden">停止</span>
               </button>
             )}
+            {!isGenerating && completedCount > 0 && (
+              <button onClick={handleContinue} disabled={regenLoading} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-gold-400/10 hover:bg-gold-400/20 text-gold-400 rounded-lg text-sm disabled:opacity-50">
+                <Play className="w-4 h-4" /><span className="hidden sm:inline">继续生成</span>
+              </button>
+            )}
             {!isGenerating && (
               <button onClick={handleRegenNovel} disabled={regenLoading} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-ink-800 hover:bg-ink-700 text-ink-300 rounded-lg text-sm disabled:opacity-50">
                 <RefreshCw className={`w-4 h-4 ${regenLoading ? 'animate-spin' : ''}`} /><span className="hidden sm:inline">重新生成</span>
