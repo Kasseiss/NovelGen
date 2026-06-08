@@ -703,6 +703,33 @@ class AppHandler(BaseHTTPRequestHandler):
             thread.start()
             return self.json_ok({'ok': True, 'jobKey': job_key})
 
+        if path == '/api/novels/stop':
+            body = self.read_json()
+            novel_id = body.get('id')
+            if not novel_id:
+                return self.json_error(400, 'id required')
+            with store_lock:
+                novel = load_novel(novel_id)
+                if not novel:
+                    return self.json_error(404, 'not found')
+                for c in novel.get('chapters', []):
+                    if c.get('status') in ('writing', 'planning'):
+                        c['status'] = 'error'
+                        c['wordCount'] = len(c.get('content', '').replace(' ', '').replace('\n', ''))
+                novel['status'] = 'completed'
+                novel['updatedAt'] = now_str()
+                novel['error'] = ''
+                save_novel(novel)
+                history = load_history()
+                for i, h in enumerate(history):
+                    if h.get('id') == novel_id:
+                        history[i] = novel_to_history_item(novel)
+                        break
+                save_history(history)
+                if novel_id in cancel_events:
+                    cancel_events[novel_id].set()
+            return self.json_ok({'ok': True})
+
         if path == '/api/novels/regenerate':
             body = self.read_json()
             novel_id = body.get('id')

@@ -88,6 +88,22 @@ export default function GeneratingPanel() {
     }
   };
 
+  const handleStop = async () => {
+    if (!currentRecordId) return;
+    try {
+      await fetch('/api/novels/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentRecordId }),
+      });
+      const currentNovel = useStore.getState().selectedNovel;
+      if (currentNovel) {
+        setSelectedNovel({ ...currentNovel, status: 'completed', error: '' });
+      }
+      setRemote((prev) => prev ? { ...prev, status: 'completed', error: '' } : null);
+    } catch {}
+  };
+
   return (
     <div className="w-full h-full flex flex-col">
       <div className="px-4 sm:px-6 py-4 border-b border-ink-800">
@@ -116,6 +132,11 @@ export default function GeneratingPanel() {
             <button onClick={() => setView('history')} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-ink-800 hover:bg-ink-700 text-ink-300 rounded-lg text-sm">
               <BookOpen className="w-4 h-4" /><span className="hidden sm:inline">书架</span>
             </button>
+            {isGenerating && (
+              <button onClick={handleStop} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm">
+                <span className="hidden sm:inline">停止生成</span><span className="sm:hidden">停止</span>
+              </button>
+            )}
             {!isGenerating && (
               <button onClick={handleRegenNovel} disabled={regenLoading} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-ink-800 hover:bg-ink-700 text-ink-300 rounded-lg text-sm disabled:opacity-50">
                 <RefreshCw className={`w-4 h-4 ${regenLoading ? 'animate-spin' : ''}`} /><span className="hidden sm:inline">重新生成</span>
