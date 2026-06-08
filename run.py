@@ -1037,6 +1037,6 @@ if __name__ == '__main__':
     print('构建检查完成', flush=True)
     restore_generating_jobs()
     print('恢复任务完成', flush=True)
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 3000
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 5025
     print(f'服务启动: http://localhost:{port}', flush=True)
     run_server('0.0.0.0', port)
