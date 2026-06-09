@@ -9,11 +9,16 @@ export default function HistoryPanel() {
   const [records, setRecords] = useState<NovelRecord[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
+  const authHeaders = (): Record<string, string> => {
+    const token = useStore.getState().token;
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  };
+
   useEffect(() => {
     let stop = false;
     const load = async () => {
       try {
-        const resp = await fetch('/api/novels');
+        const resp = await fetch('/api/novels', { headers: authHeaders() });
         const data = await resp.json();
         if (!stop) setRecords(data);
       } catch {}
@@ -27,17 +32,17 @@ export default function HistoryPanel() {
     if (!confirmDeleteId) return;
     await fetch('/api/novels/delete', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: confirmDeleteId }),
     });
     setConfirmDeleteId(null);
-    const resp = await fetch('/api/novels');
+    const resp = await fetch('/api/novels', { headers: authHeaders() });
     setRecords(await resp.json());
   };
 
   const openNovel = async (item: NovelRecord) => {
     try {
-      const resp = await fetch(`/api/novels/${item.id}`);
+      const resp = await fetch(`/api/novels/${item.id}`, { headers: authHeaders() });
       const fullNovel = await resp.json();
       if (fullNovel && !fullNovel.error) {
         setSelectedNovel(fullNovel);

@@ -29,6 +29,8 @@ export const useStore = create<AppState & {
   setSelectedNovel: (novel: NovelRecord | null) => void;
   setCurrentChapterId: (id: number) => void;
   setSidebarCollapsed: (v: boolean) => void;
+  setAuth: (token: string, username: string) => void;
+  logout: () => void;
 }>((set) => ({
   novelConfig: config.novelConfig,
   apiConfig: config.apiConfig,
@@ -41,6 +43,8 @@ export const useStore = create<AppState & {
   sidebarCollapsed: false,
   error: null,
   selectedNovel: null,
+  token: localStorage.getItem('auth_token'),
+  username: localStorage.getItem('auth_username'),
 
   setNovelConfig: (cfg) => {
     set((s) => {
@@ -61,6 +65,25 @@ export const useStore = create<AppState & {
   setView: (view) => set({ view }),
   setCurrentChapterId: (id) => set({ currentChapterId: id }),
   setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
+
+  setAuth: (token, username) => {
+    localStorage.setItem('auth_token', token);
+    localStorage.setItem('auth_username', username);
+    set({ token, username });
+  },
+
+  logout: () => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      }).catch(() => {});
+    }
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_username');
+    set({ token: null, username: null, view: 'history', selectedNovel: null, chapters: [], currentRecordId: null });
+  },
 
   setSelectedNovel: (novel) => set((s) => {
     const isNewNovel = novel?.id !== s.currentRecordId;

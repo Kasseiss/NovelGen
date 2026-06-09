@@ -48,6 +48,8 @@ export interface AppState {
   sidebarCollapsed: boolean;
   error: string | null;
   selectedNovel: NovelRecord | null;
+  token: string | null;
+  username: string | null;
 }
 
 export interface ChatMessage {

@@ -1,5 +1,12 @@
 import { ApiConfig, ChatMessage } from '../types';
 
+export function authHeaders(token: string): HeadersInit {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+  };
+}
+
 const TIMEOUT_MS = 60000;
 
 async function fetchWithTimeout(url: string, init: RequestInit, signal?: AbortSignal): Promise<Response> {

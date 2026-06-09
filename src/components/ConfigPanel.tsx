@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BookOpen, Key, Settings, ChevronDown, ChevronUp, Sparkles, Zap } from 'lucide-react';
 import { useStore } from '../store';
 import { showToast } from './Toast';
@@ -91,6 +91,19 @@ export default function ConfigPanel() {
   const [localModel, setLocalModel] = useState(apiConfig.model);
   const [localSystemPrompt, setLocalSystemPrompt] = useState(apiConfig.systemPrompt);
 
+  useEffect(() => {
+    const token = useStore.getState().token;
+    if (!token) return;
+    fetch('/api/user/config', {
+      headers: { 'Authorization': `Bearer ${token}` },
+    }).then(r => r.json()).then(cfg => {
+      if (cfg.baseUrl) setLocalBaseUrl(cfg.baseUrl);
+      if (cfg.apiKey) setLocalApiKey(cfg.apiKey);
+      if (cfg.model) setLocalModel(cfg.model);
+      if (cfg.systemPrompt) setLocalSystemPrompt(cfg.systemPrompt);
+    }).catch(() => {});
+  }, []);
+
   const handleStart = async () => {
     if (!localTheme.trim()) {
       showToast('请输入小说主题', 'error');
@@ -125,18 +138,25 @@ export default function ConfigPanel() {
       systemPrompt: localSystemPrompt,
     });
 
+    const token = useStore.getState().token;
+
+    await fetch('/api/user/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        baseUrl: localBaseUrl,
+        apiKey: localApiKey,
+        model: localModel,
+        systemPrompt: localSystemPrompt,
+      }),
+    }).catch(() => {});
+
     try {
       const resp = await fetch('/api/novels', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
           theme: localTheme,
-          apiConfig: {
-            baseUrl: localBaseUrl,
-            apiKey: localApiKey,
-            model: localModel,
-            systemPrompt: localSystemPrompt,
-          },
           novelConfig: {
             chapterCount,
             wordsPerChapter,

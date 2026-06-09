@@ -71,7 +71,7 @@ export default function ReaderPanel() {
     try {
       await fetch('/api/novels/regenerate-chapter', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useStore.getState().token || ''}` },
         body: JSON.stringify({ novelId: currentRecordId, chapterId: currentChapterId }),
       });
       const novel = useStore.getState().selectedNovel;

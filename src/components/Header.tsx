@@ -1,4 +1,4 @@
-import { BookOpen, Download, Settings, Clock, FileText } from 'lucide-react';
+import { BookOpen, Download, Settings, Clock, FileText, LogOut } from 'lucide-react';
 import { useStore } from '../store';
 
 export default function Header() {
@@ -7,6 +7,8 @@ export default function Header() {
   const setView = useStore((s) => s.setView);
   const isGenerating = useStore((s) => s.isGenerating);
   const theme = useStore((s) => s.novelConfig.theme);
+  const username = useStore((s) => s.username);
+  const logout = useStore((s) => s.logout);
 
   const handleExportTXT = () => {
     if (chapters.length === 0) return;
@@ -82,6 +84,19 @@ export default function Header() {
             <Settings className="w-4 h-4" />
             <span className="hidden sm:inline">新作品</span>
           </button>
+        )}
+
+        {username && (
+          <div className="flex items-center gap-2 ml-1 pl-1 sm:ml-2 sm:pl-2 border-l border-ink-800">
+            <span className="text-xs text-ink-500 hidden sm:inline">{username}</span>
+            <button
+              onClick={logout}
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 text-xs sm:text-sm text-ink-400 hover:text-gold-400 hover:bg-ink-900 rounded-lg transition-all"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">登出</span>
+            </button>
+          </div>
         )}
       </div>
     </header>

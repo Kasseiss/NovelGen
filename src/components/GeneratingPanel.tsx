@@ -15,12 +15,19 @@ export default function GeneratingPanel() {
   const [remote, setRemote] = useState<NovelRecord | null>(null);
   const [regenLoading, setRegenLoading] = useState(false);
 
+  const authHeaders = (): Record<string, string> => {
+    const token = useStore.getState().token;
+    return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+  };
+
   useEffect(() => {
     if (!currentRecordId) return;
     let stop = false;
     const load = async () => {
       try {
-        const resp = await fetch(`/api/novels/${currentRecordId}`);
+        const resp = await fetch(`/api/novels/${currentRecordId}`, {
+          headers: { 'Authorization': `Bearer ${useStore.getState().token || ''}` },
+        });
         const data: NovelRecord = await resp.json();
         if (stop) return;
         setRemote(data);
@@ -56,7 +63,7 @@ export default function GeneratingPanel() {
     try {
       await fetch('/api/novels/regenerate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ id: currentRecordId }),
       });
       setRemote((prev) => prev ? { ...prev, status: 'generating', chapters: [], error: '' } : null);
@@ -76,7 +83,7 @@ export default function GeneratingPanel() {
     try {
       await fetch('/api/novels/continue', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ id: currentRecordId }),
       });
       setRemote((prev) => prev ? { ...prev, status: 'generating', error: '' } : null);
@@ -95,7 +102,7 @@ export default function GeneratingPanel() {
     try {
       await fetch('/api/novels/stop', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ id: currentRecordId }),
       });
       const currentNovel = useStore.getState().selectedNovel;
