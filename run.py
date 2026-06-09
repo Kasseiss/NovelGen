@@ -37,6 +37,10 @@ store_lock = threading.RLock()
 active_jobs = {}
 cancel_events = {}
 
+_cache = {}
+_cache_lock = threading.Lock()
+CACHE_TTL = 2
+
 
 def ensure_dirs():
     DATA_DIR.mkdir(exist_ok=True)
@@ -96,6 +100,19 @@ def save_novel(novel):
         api_keys = load_api_keys()
         api_keys[novel_id] = novel['apiConfig']
         save_api_keys(api_keys)
+    with _cache_lock:
+        _cache.pop(f'novel_{novel_id}', None)
+
+
+def cached_load_novel(novel_id):
+    with _cache_lock:
+        cached = _cache.get(f'novel_{novel_id}')
+        if cached and time.time() - cached['time'] < CACHE_TTL:
+            return cached['data']
+    novel = load_novel(novel_id)
+    with _cache_lock:
+        _cache[f'novel_{novel_id}'] = {'data': novel, 'time': time.time()}
+    return novel
 
 
 def delete_novel_file(novel_id):
@@ -140,18 +157,30 @@ def load_history():
 
 def save_history(history):
     HISTORY_FILE.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding='utf-8')
+    with _cache_lock:
+        _cache.pop('history', None)
 
 
 def get_history():
     with store_lock:
-        history = load_history()
-        for item in history:
+        with _cache_lock:
+            cached = _cache.get('history')
+            if cached and time.time() - cached['time'] < CACHE_TTL:
+                history = cached['data']
+            else:
+                history = None
+        if history is None:
+            history = load_history()
+            with _cache_lock:
+                _cache['history'] = {'data': history, 'time': time.time()}
+        result = [dict(item) for item in history]
+        for item in result:
             if 'chapterMeta' in item:
                 item['chapters'] = [
                     {'id': c['id'], 'title': c.get('title', ''), 'status': c.get('status', ''), 'wordCount': c.get('wordCount', 0), 'content': '', 'plan': ''}
                     for c in item.get('chapterMeta', [])
                 ]
-        return history
+        return result
 
 
 def replace_history(data):
@@ -657,7 +686,9 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.json_ok(get_history())
         if path.startswith('/api/novels/') and len(path.split('/')) == 4:
             novel_id = path.split('/')[3]
-            novel = load_novel(novel_id)
+            if len(novel_id) > 100:
+                return self.json_error(404, 'not found')
+            novel = cached_load_novel(novel_id)
             if novel:
                 safe = {k: v for k, v in novel.items() if k != 'apiConfig'}
                 return self.json_ok(safe)
@@ -832,13 +863,10 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.json_error(404, 'not found')
 
         self.send_response(200)
-        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
-        self.send_header('Pragma', 'no-cache')
-        self.send_header('Expires', '0')
         if file_path.suffix == '.html':
+            self.send_header('Cache-Control', 'public, max-age=0, must-revalidate')
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             content = file_path.read_bytes()
-            import time
             ver = str(int(time.time())).encode()
             content = content.replace(b'.js"', b'.js?v=' + ver + b'"')
             content = content.replace(b'.css"', b'.css?v=' + ver + b'"')
@@ -847,16 +875,18 @@ class AppHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(content)
             return
-        elif file_path.suffix == '.js':
-            self.send_header('Content-Type', 'application/javascript; charset=utf-8')
-        elif file_path.suffix == '.css':
-            self.send_header('Content-Type', 'text/css; charset=utf-8')
-        elif file_path.suffix == '.svg':
-            self.send_header('Content-Type', 'image/svg+xml')
-        elif file_path.suffix == '.json':
-            self.send_header('Content-Type', 'application/json; charset=utf-8')
         else:
-            self.send_header('Content-Type', 'application/octet-stream')
+            self.send_header('Cache-Control', 'public, max-age=31536000')
+            if file_path.suffix == '.js':
+                self.send_header('Content-Type', 'application/javascript; charset=utf-8')
+            elif file_path.suffix == '.css':
+                self.send_header('Content-Type', 'text/css; charset=utf-8')
+            elif file_path.suffix == '.svg':
+                self.send_header('Content-Type', 'image/svg+xml')
+            elif file_path.suffix == '.json':
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+            else:
+                self.send_header('Content-Type', 'application/octet-stream')
         data = file_path.read_bytes()
         self.send_header('Content-Length', str(len(data)))
         self.add_cors()
@@ -887,6 +917,7 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        self.send_header('Connection', 'keep-alive')
 
     def log_message(self, fmt, *args):
         sys.stderr.write(f'[HTTP] {fmt % args}\n')
@@ -1012,6 +1043,7 @@ def restore_generating_jobs():
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
+    request_queue_size = 128
 
 
 def run_server(host, port):
