@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import random
 import sys
 import time
 import uuid
@@ -11,13 +12,48 @@ BASE_URL = os.environ.get('TEST_BASE_URL', 'http://127.0.0.1:3000')
 TEST_API_KEY = 'test-boundary-key-00000000'
 TEST_THEME = '__boundary_test_theme__'
 
+TEST_USERNAME = f'test_boundary_{random.randint(10000, 99999)}'
+TEST_PASSWORD = 'test123456'
+_auth_token = None
+
+
+def register_and_login():
+    global _auth_token
+    data = json.dumps({'username': TEST_USERNAME, 'password': TEST_PASSWORD}).encode()
+    req = urllib.request.Request(
+        BASE_URL + '/api/auth/register', data=data,
+        headers={'Content-Type': 'application/json'}, method='POST')
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        result = json.loads(resp.read())
+        _auth_token = result['token']
+    return _auth_token
+
+
+def auth_header():
+    return {'Content-Type': 'application/json', 'Authorization': f'Bearer {_auth_token}'}
+
+
+def save_user_config():
+    body = json.dumps({
+        'baseUrl': 'https://api.openai.com/v1',
+        'apiKey': TEST_API_KEY,
+        'model': 'gpt-4',
+        'systemPrompt': '',
+    }).encode()
+    req = urllib.request.Request(
+        BASE_URL + '/api/user/config', data=body,
+        headers=auth_header(), method='PUT')
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        return resp.status, json.loads(resp.read())
+
+
 results = []
 created_novel_ids = []
 
 
 def api_get(path):
     url = BASE_URL + path
-    req = urllib.request.Request(url, method='GET')
+    req = urllib.request.Request(url, headers=auth_header(), method='GET')
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             body = resp.read().decode('utf-8')
@@ -37,7 +73,68 @@ def api_post(path, data=None):
     body = json.dumps(data or {}, ensure_ascii=False).encode('utf-8')
     req = urllib.request.Request(
         url, data=body,
-        headers={'Content-Type': 'application/json'},
+        headers=auth_header(),
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp_body = resp.read().decode('utf-8')
+            return resp.status, json.loads(resp_body) if resp_body else {}
+    except urllib.error.HTTPError as e:
+        resp_body = e.read().decode('utf-8')
+        try:
+            return e.code, json.loads(resp_body)
+        except Exception:
+            return e.code, resp_body
+    except Exception as e:
+        return 0, str(e)
+
+
+def api_put(path, data=None):
+    url = BASE_URL + path
+    body = json.dumps(data or {}, ensure_ascii=False).encode('utf-8')
+    req = urllib.request.Request(
+        url, data=body,
+        headers=auth_header(),
+        method='PUT',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp_body = resp.read().decode('utf-8')
+            return resp.status, json.loads(resp_body) if resp_body else {}
+    except urllib.error.HTTPError as e:
+        resp_body = e.read().decode('utf-8')
+        try:
+            return e.code, json.loads(resp_body)
+        except Exception:
+            return e.code, resp_body
+    except Exception as e:
+        return 0, str(e)
+
+
+def raw_get(path, headers=None):
+    url = BASE_URL + path
+    req = urllib.request.Request(url, headers=headers or {}, method='GET')
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read().decode('utf-8')
+            return resp.status, json.loads(body) if body else {}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8')
+        try:
+            return e.code, json.loads(body)
+        except Exception:
+            return e.code, body
+    except Exception as e:
+        return 0, str(e)
+
+
+def raw_post(path, data=None, headers=None):
+    url = BASE_URL + path
+    body = json.dumps(data or {}, ensure_ascii=False).encode('utf-8')
+    req = urllib.request.Request(
+        url, data=body,
+        headers=headers or {'Content-Type': 'application/json'},
         method='POST',
     )
     try:
@@ -70,7 +167,7 @@ def record(test_id, scenario, precondition, steps, expected, actual, passed):
 
 def check_server():
     try:
-        req = urllib.request.Request(BASE_URL + '/api/novels', method='GET')
+        req = urllib.request.Request(BASE_URL + '/', method='GET')
         with urllib.request.urlopen(req, timeout=5) as resp:
             return resp.status == 200
     except Exception:
@@ -78,22 +175,20 @@ def check_server():
 
 
 def cleanup():
-    for nid in created_novel_ids:
-        try:
-            api_post('/api/novels/delete', {'id': nid})
-        except Exception:
-            pass
+    code, data = api_get('/api/novels')
+    if code == 200 and isinstance(data, list):
+        for novel in data:
+            nid = novel.get('id')
+            if nid:
+                try:
+                    api_post('/api/novels/delete', {'id': nid})
+                except Exception:
+                    pass
 
 
-def make_novel_payload(theme=None, api_key=None, chapter_count=None, words_per_chapter=None, system_prompt=None, base_url=None):
+def make_novel_payload(theme=None, chapter_count=None, words_per_chapter=None):
     return {
         'theme': theme if theme is not None else f'{TEST_THEME}_{uuid.uuid4().hex[:8]}',
-        'apiConfig': {
-            'baseUrl': base_url or 'https://api.openai.com/v1',
-            'apiKey': api_key or TEST_API_KEY,
-            'model': 'gpt-4',
-            'systemPrompt': system_prompt or '',
-        },
         'novelConfig': {
             'chapterCount': chapter_count if chapter_count is not None else 1,
             'wordsPerChapter': words_per_chapter if words_per_chapter is not None else 100,
@@ -239,7 +334,7 @@ def t07_post_novel_empty_body():
 
 def t08_post_novel_missing_theme():
     code, data = api_post('/api/novels', {
-        'apiConfig': {'baseUrl': 'https://api.openai.com/v1', 'apiKey': TEST_API_KEY, 'model': 'gpt-4'},
+        'novelConfig': {'chapterCount': 1, 'wordsPerChapter': 100},
     })
     passed = code == 400
     record('T08', 'POST /api/novels — 缺少 theme',
@@ -251,17 +346,22 @@ def t08_post_novel_missing_theme():
 
 
 def t09_post_novel_missing_apikey():
+    code2, _ = api_put('/api/user/config', {
+        'baseUrl': 'https://api.openai.com/v1',
+        'model': 'gpt-4',
+    })
     code, data = api_post('/api/novels', {
         'theme': f'{TEST_THEME}_nokey',
-        'apiConfig': {'baseUrl': 'https://api.openai.com/v1', 'model': 'gpt-4'},
+        'novelConfig': {'chapterCount': 1, 'wordsPerChapter': 100},
     })
     passed = code == 400
     record('T09', 'POST /api/novels — 缺少 apiKey',
-           '无',
+           '用户配置中无 apiKey',
            'POST /api/novels 不含 apiKey',
            '返回 400，提示 apiKey required',
            f'code={code}',
            passed)
+    save_user_config()
 
 
 def t10_post_novel_negative_chapter_count():
@@ -326,12 +426,12 @@ def t12_post_novel_huge_values():
 def t13_post_novel_empty_strings():
     code, data = api_post('/api/novels', {
         'theme': '',
-        'apiConfig': {'baseUrl': '', 'apiKey': '', 'model': ''},
+        'novelConfig': {'chapterCount': 1, 'wordsPerChapter': 100},
     })
     passed = code == 400
-    record('T13', 'POST /api/novels — 空字符串 theme 和 apiKey',
+    record('T13', 'POST /api/novels — 空字符串 theme',
            '无',
-           'POST /api/novels theme="", apiKey=""',
+           'POST /api/novels theme=""',
            '返回 400',
            f'code={code}',
            passed)
@@ -621,7 +721,13 @@ def t31_large_payload_long_theme():
 
 def t32_large_payload_long_system_prompt():
     long_prompt = '你是一个作家。' * 10000
-    novel = create_temp_novel(system_prompt=long_prompt)
+    code2, _ = api_put('/api/user/config', {
+        'baseUrl': 'https://api.openai.com/v1',
+        'apiKey': TEST_API_KEY,
+        'model': 'gpt-4',
+        'systemPrompt': long_prompt,
+    })
+    novel = create_temp_novel()
     passed = novel is not None
     if novel:
         created_novel_ids.append(novel['id'])
@@ -631,6 +737,7 @@ def t32_large_payload_long_system_prompt():
            '服务器不崩溃',
            f'created={novel is not None}',
            passed)
+    save_user_config()
 
 
 def t33_config_page_zero_values():
@@ -665,12 +772,13 @@ def t34_config_page_very_large():
 
 
 def t35_shelf_empty():
+    cleanup()
     code, data = api_get('/api/novels')
-    passed = code == 200 and isinstance(data, list)
+    passed = code == 200 and isinstance(data, list) and len(data) == 0
     record('T35', '书架页面 — 空书架',
-           '服务器运行中',
+           '已清理所有小说',
            'GET /api/novels',
-           '返回 200 且为数组（可能为空或有数据）',
+           '返回 200 且为空数组',
            f'code={code}, count={len(data) if isinstance(data, list) else "N/A"}',
            passed)
 
@@ -699,6 +807,88 @@ def t36_shelf_many_novels():
            f'创建 {count} 本小说，然后 GET /api/novels',
            f'返回列表长度 >= {count}',
            f'code={code}, total={total}, created={len(ids)}',
+           passed)
+
+
+def t37_unauth_access():
+    code, data = raw_get('/api/novels')
+    passed = code == 401
+    record('T37', '未认证访问 /api/novels → 401',
+           '无 token',
+           'GET /api/novels 不带 Authorization',
+           '返回 401',
+           f'code={code}',
+           passed)
+
+
+def t38_invalid_token():
+    code, data = raw_get('/api/novels', {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer invalid_token_abcdef123456',
+    })
+    passed = code == 401
+    record('T38', '无效 token 访问 → 401',
+           '使用伪造 token',
+           'GET /api/novels 带无效 Bearer token',
+           '返回 401',
+           f'code={code}',
+           passed)
+
+
+def t39_register_duplicate():
+    code, data = raw_post('/api/auth/register', {
+        'username': TEST_USERNAME,
+        'password': TEST_PASSWORD,
+    })
+    passed = code == 409
+    record('T39', '注册重复用户名 → 409',
+           f'用户名 {TEST_USERNAME} 已存在',
+           'POST /api/auth/register 相同用户名',
+           '返回 409',
+           f'code={code}',
+           passed)
+
+
+def t40_login_wrong_password():
+    code, data = raw_post('/api/auth/login', {
+        'username': TEST_USERNAME,
+        'password': 'wrong_password_123',
+    })
+    passed = code == 401
+    record('T40', '登录错误密码 → 401',
+           f'用户名 {TEST_USERNAME} 存在',
+           'POST /api/auth/login 错误密码',
+           '返回 401',
+           f'code={code}',
+           passed)
+
+
+def t41_token_invalidated_after_logout():
+    result = raw_post('/api/auth/register', {
+        'username': f'test_logout_{random.randint(10000, 99999)}',
+        'password': 'test123456',
+    })
+    code0, data0 = result
+    if code0 != 201:
+        record('T41', '登出后 token 失效 → 401',
+               '注册临时用户', '登出后用 token 访问',
+               '返回 401', f'register_code={code0}', False)
+        return
+    tmp_token = data0['token']
+    code_logout, _ = raw_post('/api/auth/logout', {}, {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {tmp_token}',
+    })
+    code, data = raw_get('/api/novels', {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {tmp_token}',
+    })
+    passed = code == 401
+    record('T41', '登出后 token 失效 → 401',
+           f'已登出，logout_code={code_logout}',
+           'GET /api/novels 用已登出的 token',
+           '返回 401',
+           f'code={code}',
            passed)
 
 
@@ -743,9 +933,24 @@ def main():
         print('\n[ERROR] 无法连接服务器，请先启动: python run.py')
         sys.exit(1)
 
-    print('\n[INFO] 服务器连接成功，开始测试...\n')
+    print('\n[INFO] 服务器连接成功，注册测试用户...')
+    try:
+        register_and_login()
+        print(f'[INFO] 注册成功: {TEST_USERNAME}')
+    except Exception as e:
+        print(f'\n[ERROR] 注册失败: {e}')
+        sys.exit(1)
+
+    print('[INFO] 保存 API 配置...')
+    save_user_config()
+    print('[INFO] API 配置已保存，开始测试...\n')
 
     tests = [
+        t37_unauth_access,
+        t38_invalid_token,
+        t39_register_duplicate,
+        t40_login_wrong_password,
+        t41_token_invalidated_after_logout,
         t01_get_novels_empty,
         t02_get_novels_normal,
         t03_get_novel_valid_id,

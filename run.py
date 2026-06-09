@@ -880,6 +880,21 @@ class AppHandler(BaseHTTPRequestHandler):
             return user_id
         return None
 
+    def do_PUT(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path.rstrip('/') or '/'
+
+        user_id = self.get_auth_user()
+        if not user_id:
+            return self.json_error(401, 'unauthorized')
+
+        if path == '/api/user/config':
+            body = self.read_json()
+            db_save_user_api_config(user_id, body)
+            return self.json_ok({'ok': True})
+
+        return self.json_error(404, 'not found')
+
     def do_OPTIONS(self):
         self.send_response(204)
         self.add_cors()
@@ -1065,6 +1080,21 @@ class AppHandler(BaseHTTPRequestHandler):
             with db_lock:
                 active_jobs[job_key] = thread
             thread.start()
+            return self.json_ok({'ok': True})
+
+        return self.json_error(404, 'not found')
+
+    def do_PUT(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path.rstrip('/') or '/'
+
+        user_id = self.get_auth_user()
+        if not user_id:
+            return self.json_error(401, 'unauthorized')
+
+        if path == '/api/user/config':
+            body = self.read_json()
+            db_save_user_api_config(user_id, body)
             return self.json_ok({'ok': True})
 
         return self.json_error(404, 'not found')

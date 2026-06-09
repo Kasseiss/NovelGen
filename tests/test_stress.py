@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import random
 import sys
 import time
 import uuid
@@ -13,13 +14,47 @@ BASE_URL = os.environ.get('TEST_BASE_URL', 'http://127.0.0.1:3000')
 TEST_API_KEY = 'test-stress-key-00000000'
 TEST_THEME = '__stress_test_theme__'
 
+TEST_USERNAME = f'test_stress_{random.randint(10000, 99999)}'
+TEST_PASSWORD = 'test123456'
+_auth_token = None
+
 created_novel_ids = []
 ids_lock = threading.Lock()
 
 
+def register_and_login():
+    global _auth_token
+    data = json.dumps({'username': TEST_USERNAME, 'password': TEST_PASSWORD}).encode()
+    req = urllib.request.Request(
+        BASE_URL + '/api/auth/register', data=data,
+        headers={'Content-Type': 'application/json'}, method='POST')
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        result = json.loads(resp.read())
+        _auth_token = result['token']
+    return _auth_token
+
+
+def auth_header():
+    return {'Content-Type': 'application/json', 'Authorization': f'Bearer {_auth_token}'}
+
+
+def save_user_config():
+    body = json.dumps({
+        'baseUrl': 'https://api.openai.com/v1',
+        'apiKey': TEST_API_KEY,
+        'model': 'gpt-4',
+        'systemPrompt': '',
+    }).encode()
+    req = urllib.request.Request(
+        BASE_URL + '/api/user/config', data=body,
+        headers=auth_header(), method='PUT')
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        return resp.status, json.loads(resp.read())
+
+
 def api_get(path, timeout=10):
     url = BASE_URL + path
-    req = urllib.request.Request(url, method='GET')
+    req = urllib.request.Request(url, headers=auth_header(), method='GET')
     start = time.monotonic()
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -40,7 +75,7 @@ def api_post(path, data=None, timeout=10):
     body = json.dumps(data or {}, ensure_ascii=False).encode('utf-8')
     req = urllib.request.Request(
         url, data=body,
-        headers={'Content-Type': 'application/json'},
+        headers=auth_header(),
         method='POST',
     )
     start = time.monotonic()
@@ -61,7 +96,7 @@ def api_post(path, data=None, timeout=10):
 
 def check_server():
     try:
-        req = urllib.request.Request(BASE_URL + '/api/novels', method='GET')
+        req = urllib.request.Request(BASE_URL + '/', method='GET')
         with urllib.request.urlopen(req, timeout=5) as resp:
             return resp.status == 200
     except Exception:
@@ -128,12 +163,6 @@ def analyze_results(task_name, latencies, errors, total_time):
 def make_novel_payload(theme_suffix=''):
     return {
         'theme': f'{TEST_THEME}_{uuid.uuid4().hex[:8]}{theme_suffix}',
-        'apiConfig': {
-            'baseUrl': 'https://api.openai.com/v1',
-            'apiKey': TEST_API_KEY,
-            'model': 'gpt-4',
-            'systemPrompt': '',
-        },
         'novelConfig': {
             'chapterCount': 0,
             'wordsPerChapter': 100,
@@ -380,7 +409,17 @@ def main():
         print('\n[ERROR] 无法连接服务器，请先启动: python run.py')
         sys.exit(1)
 
-    print('\n[INFO] 服务器连接成功，开始压力测试...\n')
+    print('\n[INFO] 服务器连接成功，注册测试用户...')
+    try:
+        register_and_login()
+        print(f'[INFO] 注册成功: {TEST_USERNAME}')
+    except Exception as e:
+        print(f'\n[ERROR] 注册失败: {e}')
+        sys.exit(1)
+
+    print('[INFO] 保存 API 配置...')
+    save_user_config()
+    print('[INFO] API 配置已保存，开始压力测试...\n')
 
     try:
         print('\n[TEST 1/5] 并发读取测试')
