@@ -10,6 +10,7 @@ export default function GeneratingPanel() {
   const setView = useStore((s) => s.setView);
   const chapters = useStore((s) => s.chapters);
   const novelConfig = useStore((s) => s.novelConfig);
+  const storeIsGenerating = useStore((s) => s.isGenerating);
 
   const [remote, setRemote] = useState<NovelRecord | null>(null);
   const [regenLoading, setRegenLoading] = useState(false);
@@ -41,7 +42,7 @@ export default function GeneratingPanel() {
   const totalWordCount = localChapters.reduce((sum, c) => sum + c.wordCount, 0);
   const progress = novelConfig.chapterCount > 0 ? Math.min(100, (completedCount / novelConfig.chapterCount) * 100) : 0;
   const currentChapter = localChapters.find((c) => c.status === 'writing' || c.status === 'planning');
-  const isGenerating = (remote?.status || useStore.getState().selectedNovel?.status) === 'generating';
+  const isGenerating = storeIsGenerating || remote?.status === 'generating';
   const hasUncompletedChapters = localChapters.some(c => c.status !== 'completed');
 
   const handleReadChapter = (chapterId: number) => {
