@@ -993,7 +993,7 @@ class AppHandler(BaseHTTPRequestHandler):
             novel_data = {
                 'id': novel_id,
                 'theme': theme,
-                'chapterCount': int(novel_config.get('chapterCount', 0) or 0),
+                'chapterCount': max(0, int(novel_config.get('chapterCount', 0) or 0)),
                 'wordsPerChapter': max(1, int(novel_config.get('wordsPerChapter', 3000) or 3000)),
                 'status': 'generating',
                 'error': '',

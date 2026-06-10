@@ -595,11 +595,11 @@ def t25_regenerate_chapter_invalid_params():
         'novelId': 'nonexistent',
         'chapterId': 999,
     })
-    passed = code == 200
+    passed = code == 404
     record('T25', 'POST /api/novels/regenerate-chapter — 无效参数',
            '无此小说',
            'POST /api/novels/regenerate-chapter novelId=nonexistent, chapterId=999',
-           '返回 200（后台异步执行，不会立即报错）',
+           '返回 404（小说不存在）',
            f'code={code}',
            passed)
 
