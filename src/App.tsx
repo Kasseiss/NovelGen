@@ -19,14 +19,23 @@ function App() {
       setChecking(false);
       return;
     }
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => { useStore.getState().logout(); setChecking(false); }, 5000);
     fetch('/api/auth/me', {
       headers: { 'Authorization': `Bearer ${token}` },
+      signal: ctrl.signal,
     }).then(r => {
+      clearTimeout(timer);
       if (!r.ok) {
         useStore.getState().logout();
       }
       setChecking(false);
-    }).catch(() => setChecking(false));
+    }).catch(() => {
+      clearTimeout(timer);
+      useStore.getState().logout();
+      setChecking(false);
+    });
+    return () => { ctrl.abort(); clearTimeout(timer); };
   }, [token]);
 
   if (checking) {
